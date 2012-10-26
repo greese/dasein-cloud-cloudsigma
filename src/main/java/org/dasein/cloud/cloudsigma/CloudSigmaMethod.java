@@ -127,9 +127,18 @@ public class CloudSigmaMethod {
 
     public CloudSigmaMethod(@Nonnull CloudSigma provider) { this.provider = provider; }
 
-    public @Nullable String get(@Nonnull String resource) throws InternalException, CloudException {
+    public @Nullable Map<String,String> getObject(@Nonnull String resource) throws InternalException, CloudException {
+        String body = getString(resource);
+
+        if( body == null || body.trim().length() < 1 ) {
+            return null;
+        }
+        return toMap(body);
+    }
+
+    public @Nullable String getString(@Nonnull String resource) throws InternalException, CloudException {
         if( logger.isTraceEnabled() ) {
-            logger.trace("ENTER - " + CloudSigma.class.getName() + ".get(" + resource + ")");
+            logger.trace("ENTER - " + CloudSigma.class.getName() + ".getString(" + resource + ")");
         }
 
         try {
@@ -238,7 +247,7 @@ public class CloudSigmaMethod {
         }
         finally {
             if( logger.isTraceEnabled() ) {
-                logger.trace("EXIT - " + CloudSigma.class.getName() + ".get()");
+                logger.trace("EXIT - " + CloudSigma.class.getName() + ".getString()");
             }
         }
     }

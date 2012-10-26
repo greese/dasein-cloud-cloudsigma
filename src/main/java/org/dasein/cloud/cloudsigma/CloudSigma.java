@@ -85,7 +85,7 @@ public class CloudSigma extends AbstractCloud {
             }
             try {
                 CloudSigmaMethod method = new CloudSigmaMethod(this);
-                String body = method.get(CloudSigmaMethod.M_PROFILE_INFO);
+                String body = method.getString(CloudSigmaMethod.M_PROFILE_INFO);
 
                 if( body == null ) {
                     return null;
