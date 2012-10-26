@@ -3,6 +3,7 @@ package org.dasein.cloud.cloudsigma;
 import org.apache.log4j.Logger;
 import org.dasein.cloud.AbstractCloud;
 import org.dasein.cloud.ProviderContext;
+import org.dasein.cloud.cloudsigma.compute.CloudSigmaComputeServices;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
@@ -31,8 +32,7 @@ public class CloudSigma extends AbstractCloud {
         return name.substring(idx+1);
     }
 
-    static public @Nonnull
-    Logger getLogger(@Nonnull Class<?> cls) {
+    static public @Nonnull Logger getLogger(@Nonnull Class<?> cls) {
         String pkg = getLastItem(cls.getPackage().getName());
 
         if( pkg.equals("cloudsigma") ) {
@@ -56,6 +56,11 @@ public class CloudSigma extends AbstractCloud {
         String name = (ctx == null ? null : ctx.getCloudName());
 
         return (name == null ? "CloudSigma" : name);
+    }
+
+    @Override
+    public @Nonnull CloudSigmaComputeServices getComputeServices() {
+        return new CloudSigmaComputeServices(this);
     }
 
     @Override

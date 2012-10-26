@@ -58,7 +58,7 @@
         <priority value="TRACE" />
         <appender-ref ref="ASYNCUNIT" />
     </category>
-    
+
     <category name="dasein.cloud.cloudsigma.wire">
         <priority value="DEBUG" />
         <appender-ref ref="ASYNCWIRE" />

@@ -16,14 +16,13 @@
  */
 package org.dasein.cloud.cloudsigma;
 
+import org.apache.commons.codec.binary.Base64;
 import org.apache.http.Header;
 import org.apache.http.HttpEntity;
 import org.apache.http.HttpHost;
 import org.apache.http.HttpResponse;
 import org.apache.http.HttpVersion;
 import org.apache.http.StatusLine;
-import org.apache.http.auth.AuthScope;
-import org.apache.http.auth.UsernamePasswordCredentials;
 import org.apache.http.client.HttpClient;
 import org.apache.http.client.methods.HttpGet;
 import org.apache.http.conn.params.ConnRoutePNames;
@@ -45,8 +44,10 @@ import java.io.IOException;
 import java.io.UnsupportedEncodingException;
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.util.ArrayList;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 
@@ -63,6 +64,7 @@ public class CloudSigmaMethod {
     static private final Logger wire   = CloudSigma.getWireLogger(CloudSigmaMethod.class);
 
     static public final String M_PROFILE_INFO = "/profile/info";
+    static public final String M_SERVERS_INFO = "/servers/info";
 
     /**
      * 200	OK	Command succeeded, data returned (possibly 0 length)
@@ -86,15 +88,19 @@ public class CloudSigmaMethod {
 
             for( String line : lines ) {
                 line = line.trim();
-                String[] components = line.split("\t");
+                int idx = line.indexOf(" ");
 
-                if( components.length < 2 ) {
+                if( idx == -1 ) {
                     if( line.equals(key) ) {
-                        return line;
+                        return null;
                     }
                 }
-                else if( components[0].equals(key) ) {
-                    return components[1];
+                else {
+                    String k = line.substring(0, idx);
+
+                    if( k.equals(key) ) {
+                        return line.substring(idx+1);
+                    }
                 }
             }
         }
@@ -110,13 +116,16 @@ public class CloudSigmaMethod {
 
             for( String line : lines ) {
                 line = line.trim();
-                String[] components = line.split("\t");
 
-                if( components.length < 2 ) {
+                int idx = line.indexOf(" ");
+
+                if( idx == -1 ) {
                     values.put(line, null);
                 }
                 else {
-                    values.put(components[0], components[1]);
+                    String k = line.substring(0, idx);
+
+                    values.put(k, line.substring(idx+1));
                 }
             }
         }
@@ -149,10 +158,35 @@ public class CloudSigmaMethod {
                 wire.debug(">>> [GET (" + (new Date()) + ")] -> " + target + " >--------------------------------------------------------------------------------------");
             }
             try {
-                HttpClient client = getClient();
+                URI uri;
 
                 try {
+                    uri = new URI(target);
+                }
+                catch( URISyntaxException e ) {
+                    throw new CloudSigmaConfigurationException(e);
+                }
+                HttpClient client = getClient(uri);
+
+                try {
+                    ProviderContext ctx = provider.getContext();
+
+                    if( ctx == null ) {
+                        throw new NoContextException();
+                    }
                     HttpGet get = new HttpGet(target);
+                    String auth;
+
+                    try {
+                        String userName = new String(ctx.getAccessPublic(), "utf-8");
+                        String password = new String(ctx.getAccessPrivate(), "utf-8");
+
+                        auth = new String(Base64.encodeBase64((userName + ":" + password).getBytes()));
+                    }
+                    catch( UnsupportedEncodingException e ) {
+                        throw new InternalException(e);
+                    }
+                    get.addHeader("Authorization", "Basic " + auth);
 
                     if( wire.isDebugEnabled() ) {
                         wire.debug(get.getRequestLine().toString());
@@ -216,7 +250,7 @@ public class CloudSigmaMethod {
                         HttpEntity entity = response.getEntity();
 
                         if( entity == null ) {
-                            return null;
+                            return "";
                         }
                         String body;
 
@@ -252,35 +286,17 @@ public class CloudSigmaMethod {
         }
     }
 
-    private @Nonnull HttpClient getClient() throws InternalException, CloudException {
+    private @Nonnull HttpClient getClient(URI uri) throws InternalException, CloudException {
         ProviderContext ctx = provider.getContext();
 
         if( ctx == null ) {
             throw new NoContextException();
         }
-        String endpoint = ctx.getEndpoint();
-
-        if( endpoint == null ) {
-            throw new CloudSigmaConfigurationException("No cloud endpoint was defined");
-        }
-        boolean ssl = endpoint.startsWith("https");
-        int targetPort;
-        URI uri;
-
-        try {
-            uri = new URI(endpoint);
-            targetPort = uri.getPort();
-            if( targetPort < 1 ) {
-                targetPort = (ssl ? 443 : 80);
-            }
-        }
-        catch( URISyntaxException e ) {
-            throw new CloudSigmaConfigurationException(e);
-        }
-        HttpHost targetHost = new HttpHost(uri.getHost(), targetPort, uri.getScheme());
+        boolean ssl = uri.getScheme().startsWith("https");
         HttpParams params = new BasicHttpParams();
 
         HttpProtocolParams.setVersion(params, HttpVersion.HTTP_1_1);
+        //noinspection deprecation
         HttpProtocolParams.setContentCharset(params, HTTP.UTF_8);
         HttpProtocolParams.setUserAgent(params, "");
 
@@ -299,18 +315,7 @@ public class CloudSigmaMethod {
                 params.setParameter(ConnRoutePNames.DEFAULT_PROXY, new HttpHost(proxyHost, port, ssl ? "https" : "http"));
             }
         }
-        DefaultHttpClient client = new DefaultHttpClient(params);
-
-        try {
-            String userName = new String(ctx.getAccessPublic(), "utf-8");
-            String password = new String(ctx.getAccessPrivate(), "utf-8");
-
-            client.getCredentialsProvider().setCredentials(new AuthScope(targetHost.getHostName(), targetHost.getPort()), new UsernamePasswordCredentials(userName, password));
-        }
-        catch( UnsupportedEncodingException e ) {
-            throw new InternalException(e);
-        }
-        return client;
+        return new DefaultHttpClient(params);
     }
 
     private @Nonnull String getEndpoint(@Nonnull String resource) throws NoContextException {
@@ -334,5 +339,45 @@ public class CloudSigmaMethod {
             return endpoint + resource;
         }
         return (endpoint + "/" + resource);
+    }
+
+    public @Nullable List<Map<String,String>> list(@Nonnull String resource) throws InternalException, CloudException {
+        String body = getString(resource);
+
+        if( body == null ) {
+            return null;
+        }
+        ArrayList<Map<String,String>> objects = new ArrayList<Map<String, String>>();
+
+        body = body.trim();
+        if( body.length() > 0 ) {
+            HashMap<String,String> currentObject = new HashMap<String, String>();
+            String[] lines = body.split("\n");
+
+            for( String line : lines ) {
+                line = line.trim();
+                if( line.length() < 1 ) {
+                    if( !currentObject.isEmpty() ) {
+                        objects.add(currentObject);
+                        currentObject = new HashMap<String, String>();
+                    }
+                    continue;
+                }
+                int idx = line.indexOf(" ");
+
+                if( idx == -1 ) {
+                    currentObject.put(line, null);
+                }
+                else {
+                    String k = line.substring(0, idx);
+
+                    currentObject.put(k, line.substring(idx+1));
+                }
+            }
+            if( !currentObject.isEmpty() ) {
+                objects.add(currentObject);
+            }
+        }
+        return objects;
     }
 }
