@@ -54,12 +54,12 @@
         <appender-ref ref="ASYNCUNIT" />
     </category>
     
-    <category name="dasein.cloud.nova.std">
+    <category name="dasein.cloud.cloudsigma.std">
         <priority value="TRACE" />
         <appender-ref ref="ASYNCUNIT" />
     </category>
     
-    <category name="dasein.cloud.nova.wire">
+    <category name="dasein.cloud.cloudsigma.wire">
         <priority value="DEBUG" />
         <appender-ref ref="ASYNCWIRE" />
     </category>
