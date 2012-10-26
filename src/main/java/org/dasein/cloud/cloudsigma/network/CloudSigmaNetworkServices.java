@@ -14,35 +14,22 @@
  *  enStratus Networks Inc.
  * ====================================================================
  */
-package org.dasein.cloud.cloudsigma.compute;
+package org.dasein.cloud.cloudsigma.network;
 
 import org.dasein.cloud.cloudsigma.CloudSigma;
-import org.dasein.cloud.cloudsigma.compute.image.BootDriveSupport;
-import org.dasein.cloud.cloudsigma.compute.vm.ServerSupport;
-import org.dasein.cloud.compute.AbstractComputeServices;
+import org.dasein.cloud.network.AbstractNetworkServices;
 
 import javax.annotation.Nonnull;
 
 /**
- * Implements compute services against CloudSigma.
- * <p>Created by George Reese: 10/25/12 11:02 PM</p>
+ * Implements the various network services supported in CloudSigma.
+ * <p>Created by George Reese: 10/26/12 12:28 PM</p>
  * @author George Reese
  * @version 2012.09 initial version
- * @since 2012.09 initial version
+ * @since 2012.09
  */
-public class CloudSigmaComputeServices extends AbstractComputeServices {
+public class CloudSigmaNetworkServices extends AbstractNetworkServices {
     private CloudSigma provider;
 
-    public CloudSigmaComputeServices(@Nonnull CloudSigma provider) { this.provider = provider; }
-
-    @Override
-    public @Nonnull
-    BootDriveSupport getImageSupport() {
-        return new BootDriveSupport(provider);
-    }
-
-    @Override
-    public @Nonnull ServerSupport getVirtualMachineSupport() {
-        return new ServerSupport(provider);
-    }
+    public CloudSigmaNetworkServices(@Nonnull CloudSigma provider) { this.provider = provider; }
 }

@@ -25,7 +25,9 @@ import org.apache.http.HttpVersion;
 import org.apache.http.StatusLine;
 import org.apache.http.client.HttpClient;
 import org.apache.http.client.methods.HttpGet;
+import org.apache.http.client.methods.HttpPost;
 import org.apache.http.conn.params.ConnRoutePNames;
+import org.apache.http.entity.StringEntity;
 import org.apache.http.impl.client.DefaultHttpClient;
 import org.apache.http.params.BasicHttpParams;
 import org.apache.http.params.HttpParams;
@@ -63,9 +65,6 @@ public class CloudSigmaMethod {
     static private final Logger logger = CloudSigma.getLogger(CloudSigmaMethod.class);
     static private final Logger wire   = CloudSigma.getWireLogger(CloudSigmaMethod.class);
 
-    static public final String M_PROFILE_INFO = "/profile/info";
-    static public final String M_SERVERS_INFO = "/servers/info";
-
     /**
      * 200	OK	Command succeeded, data returned (possibly 0 length)
      */
@@ -74,6 +73,11 @@ public class CloudSigmaMethod {
      * 204	No Content	Command succeeded, no data returned (by definition)
      */
     static public final int NO_CONTENT     = 204;
+
+    /**
+     * 400	Bad Request
+     */
+    static public final int BAD_REQUEST     = 400;
 
     /**
      * 404	Not Found	Command, drive, server or other object not found
@@ -244,6 +248,9 @@ public class CloudSigmaMethod {
                             wire.debug(body);
                         }
                         wire.debug("");
+                        if( status.getStatusCode() == BAD_REQUEST && body.contains("could not be found") ) {
+                            return null;
+                        }
                         throw new CloudSigmaException(CloudErrorType.GENERAL, status.getStatusCode(), status.getReasonPhrase(), body);
                     }
                     else {
@@ -379,5 +386,161 @@ public class CloudSigmaMethod {
             }
         }
         return objects;
+    }
+
+    public @Nullable Map<String,String> postObject(@Nonnull String resource, @Nonnull String body) throws InternalException, CloudException {
+        String response = postString(resource, body);
+
+        if( response == null || response.trim().length() < 1 ) {
+            return null;
+        }
+        return toMap(response);
+    }
+
+    public @Nullable String postString(@Nonnull String resource, @Nonnull String body) throws InternalException, CloudException {
+        if( logger.isTraceEnabled() ) {
+            logger.trace("ENTER - " + CloudSigma.class.getName() + ".postString(" + resource + "," + body + ")");
+        }
+
+        try {
+            String target = getEndpoint(resource);
+
+            if( wire.isDebugEnabled() ) {
+                wire.debug("");
+                wire.debug(">>> [POST (" + (new Date()) + ")] -> " + target + " >--------------------------------------------------------------------------------------");
+            }
+            try {
+                URI uri;
+
+                try {
+                    uri = new URI(target);
+                }
+                catch( URISyntaxException e ) {
+                    throw new CloudSigmaConfigurationException(e);
+                }
+                HttpClient client = getClient(uri);
+
+                try {
+                    ProviderContext ctx = provider.getContext();
+
+                    if( ctx == null ) {
+                        throw new NoContextException();
+                    }
+                    HttpPost post = new HttpPost(target);
+                    String auth;
+
+                    try {
+                        String userName = new String(ctx.getAccessPublic(), "utf-8");
+                        String password = new String(ctx.getAccessPrivate(), "utf-8");
+
+                        auth = new String(Base64.encodeBase64((userName + ":" + password).getBytes()));
+                    }
+                    catch( UnsupportedEncodingException e ) {
+                        throw new InternalException(e);
+                    }
+                    post.addHeader("Authorization", "Basic " + auth);
+                    try {
+                        post.setEntity(new StringEntity(body, "utf-8"));
+                    }
+                    catch( UnsupportedEncodingException e ) {
+                        logger.error("Unsupported encoding UTF-8: " + e.getMessage());
+                        throw new InternalException(e);
+                    }
+
+                    if( wire.isDebugEnabled() ) {
+                        wire.debug(post.getRequestLine().toString());
+                        for( Header header : post.getAllHeaders() ) {
+                            wire.debug(header.getName() + ": " + header.getValue());
+                        }
+                        wire.debug("");
+                        wire.debug(body);
+                        wire.debug("");
+                    }
+                    HttpResponse response;
+                    StatusLine status;
+
+                    try {
+                        response = client.execute(post);
+                        status = response.getStatusLine();
+                    }
+                    catch( IOException e ) {
+                        logger.error("Failed to execute HTTP request due to a cloud I/O error: " + e.getMessage());
+                        throw new CloudException(e);
+                    }
+                    if( logger.isDebugEnabled() ) {
+                        logger.debug("HTTP Status " + status);
+                    }
+                    Header[] headers = response.getAllHeaders();
+
+                    if( wire.isDebugEnabled() ) {
+                        wire.debug(status.toString());
+                        for( Header h : headers ) {
+                            if( h.getValue() != null ) {
+                                wire.debug(h.getName() + ": " + h.getValue().trim());
+                            }
+                            else {
+                                wire.debug(h.getName() + ":");
+                            }
+                        }
+                        wire.debug("");
+                    }
+                    if( status.getStatusCode() == NOT_FOUND ) {
+                        return null;
+                    }
+                    if( status.getStatusCode() != OK && status.getStatusCode() != NO_CONTENT ) {
+                        logger.error("Expected OK for POST request, got " + status.getStatusCode());
+                        HttpEntity entity = response.getEntity();
+
+                        if( entity == null ) {
+                            throw new CloudSigmaException(CloudErrorType.GENERAL, status.getStatusCode(), status.getReasonPhrase(), status.getReasonPhrase());
+                        }
+                        try {
+                            body = EntityUtils.toString(entity);
+                        }
+                        catch( IOException e ) {
+                            throw new CloudSigmaException(e);
+                        }
+                        if( wire.isDebugEnabled() ) {
+                            wire.debug(body);
+                        }
+                        wire.debug("");
+                        throw new CloudSigmaException(CloudErrorType.GENERAL, status.getStatusCode(), status.getReasonPhrase(), body);
+                    }
+                    else {
+                        HttpEntity entity = response.getEntity();
+
+                        if( entity == null ) {
+                            return "";
+                        }
+                        try {
+                            body = EntityUtils.toString(entity);
+                        }
+                        catch( IOException e ) {
+                            throw new CloudSigmaException(e);
+                        }
+                        if( wire.isDebugEnabled() ) {
+                            wire.debug(body);
+                        }
+                        wire.debug("");
+                        return body;
+                    }
+                }
+                finally {
+                    try { client.getConnectionManager().shutdown(); }
+                    catch( Throwable ignore ) { }
+                }
+            }
+            finally {
+                if( wire.isDebugEnabled() ) {
+                    wire.debug("<<< [POST (" + (new Date()) + ")] -> " + target + " <--------------------------------------------------------------------------------------");
+                    wire.debug("");
+                }
+            }
+        }
+        finally {
+            if( logger.isTraceEnabled() ) {
+                logger.trace("EXIT - " + CloudSigma.class.getName() + ".postString()");
+            }
+        }
     }
 }

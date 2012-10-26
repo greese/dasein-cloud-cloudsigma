@@ -4,6 +4,7 @@ import org.apache.log4j.Logger;
 import org.dasein.cloud.AbstractCloud;
 import org.dasein.cloud.ProviderContext;
 import org.dasein.cloud.cloudsigma.compute.CloudSigmaComputeServices;
+import org.dasein.cloud.cloudsigma.network.CloudSigmaNetworkServices;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
@@ -69,6 +70,11 @@ public class CloudSigma extends AbstractCloud {
     }
 
     @Override
+    public @Nonnull CloudSigmaNetworkServices getNetworkServices() {
+        return new CloudSigmaNetworkServices(this);
+    }
+
+    @Override
     public @Nonnull String getProviderName() {
         ProviderContext ctx = getContext();
         String name = (ctx == null ? null : ctx.getProviderName());
@@ -90,7 +96,7 @@ public class CloudSigma extends AbstractCloud {
             }
             try {
                 CloudSigmaMethod method = new CloudSigmaMethod(this);
-                String body = method.getString(CloudSigmaMethod.M_PROFILE_INFO);
+                String body = method.getString("/profile/info");
 
                 if( body == null ) {
                     return null;
