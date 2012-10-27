@@ -36,6 +36,7 @@ import org.dasein.cloud.compute.VirtualMachineProduct;
 import org.dasein.cloud.compute.VirtualMachineSupport;
 import org.dasein.cloud.compute.VmState;
 import org.dasein.cloud.compute.VmStatistics;
+import org.dasein.cloud.compute.Volume;
 import org.dasein.cloud.identity.ServiceAction;
 import org.dasein.util.CalendarWrapper;
 import org.dasein.util.uom.storage.Gigabyte;
@@ -67,6 +68,94 @@ public class ServerSupport implements VirtualMachineSupport {
     private CloudSigma provider;
 
     public ServerSupport(@Nonnull CloudSigma provider) { this.provider = provider; }
+
+
+    public void attach(@Nonnull Volume volume, @Nonnull String serverId, @Nonnull String deviceId) throws CloudException, InternalException {
+        if( volume.getProviderVirtualMachineId() != null ) {
+            throw new CloudException("Volume is already attached to " + volume.getProviderVirtualMachineId());
+        }
+        VirtualMachine vm = getVirtualMachine(serverId);
+
+        if( vm == null ) {
+            throw new CloudException("Virtual machine " + serverId + " does not exist");
+        }
+
+        StringBuilder body = new StringBuilder();
+
+        body.append("block:").append(deviceId).append(" ").append(volume.getProviderVolumeId()).append("\n");
+        change(vm, body.toString());
+    }
+
+    private void change(@Nonnull VirtualMachine vm, @Nonnull String body) throws CloudException, InternalException {
+        if( logger.isTraceEnabled() ) {
+            logger.trace("ENTER - " + ServerSupport.class.getName() + ".change(" + vm + "," + body + ")");
+        }
+        try {
+            boolean restart = !VmState.STOPPED.equals(vm.getCurrentState());
+            VirtualMachine workingVm = vm;
+
+            if( restart ) {
+                if( logger.isInfoEnabled() ) {
+                    logger.info("Virtual machine " + vm.getProviderVirtualMachineId() + " needs to be stopped prior to change");
+                }
+                stop(vm.getProviderVirtualMachineId());
+                if( logger.isInfoEnabled() ) {
+                    logger.info("Waiting for " + vm.getProviderVirtualMachineId() + " to fully stop");
+                }
+                workingVm = waitForState(workingVm, CalendarWrapper.MINUTE * 10L, VmState.STOPPED);
+                if( workingVm == null ) {
+                    logger.info("Virtual machine " + vm.getProviderVirtualMachineId() + " disappared while waiting for stop");
+                    throw new CloudException("Virtual machine " + vm.getProviderVirtualMachineId() + " disappeared before attachment could happen");
+                }
+                if( logger.isInfoEnabled() ) {
+                    logger.info("Done waiting for " + vm.getProviderVirtualMachineId() + ": " + workingVm.getCurrentState());
+                }
+            }
+            CloudSigmaMethod method = new CloudSigmaMethod(provider);
+
+            if( logger.isInfoEnabled() ) {
+                logger.info("POSTing changes to " + vm.getProviderVirtualMachineId());
+            }
+            if( method.postObject(toServerURL(vm.getProviderVirtualMachineId(), "set"), body) == null ) {
+                throw new CloudException("Unable to locate servers endpoint in CloudSigma");
+            }
+            if( logger.isInfoEnabled() ) {
+                logger.info("Change to " + vm.getProviderVirtualMachineId() + " succeeded");
+            }
+            if( restart ) {
+                if( logger.isInfoEnabled() ) {
+                    logger.info("Restarting " + vm.getProviderVirtualMachineId());;
+                }
+                final String id = vm.getProviderVirtualMachineId();
+
+                Thread t = new Thread() {
+                    public void run() {
+                        try {
+                            try {
+                                ServerSupport.this.start(id);
+                            }
+                            catch( Exception e ) {
+                                logger.warn("Failed to start VM post-change: " + e.getMessage());
+                            }
+                        }
+                        finally {
+                            provider.release();
+                        }
+                    }
+                };
+
+                provider.hold();
+                t.setName("Restart CloudSigma VM " + id);
+                t.setDaemon(true);
+                t.start();
+            }
+        }
+        finally {
+            if( logger.isTraceEnabled() ) {
+                logger.trace("EXIT - " + ServerSupport.class.getName() + ".change()");
+            }
+        }
+    }
 
     @Override
     public @Nonnull VirtualMachine clone(final @Nonnull String vmId, @Nonnull String intoDcId, @Nonnull String name, @Nonnull String description, boolean powerOn, @Nullable String... firewallIds) throws InternalException, CloudException {
@@ -157,6 +246,31 @@ public class ServerSupport implements VirtualMachineSupport {
         }
     }
 
+
+    public void detach(@Nonnull Volume volume) throws CloudException, InternalException {
+        String serverId = volume.getProviderVirtualMachineId();
+
+        if( serverId == null ) {
+            throw new CloudException("No server is attached to " + volume.getProviderVolumeId());
+        }
+
+        VirtualMachine vm = getVirtualMachine(serverId);
+
+        if( vm == null ) {
+            throw new CloudException("No such virtual machine: " + serverId);
+        }
+
+        String deviceId = getDeviceId(vm, volume.getProviderVolumeId());
+
+        if( deviceId == null ) {
+            throw new CloudException("Volume does not appear to be attached null vs " + volume.getDeviceId());
+        }
+        StringBuilder body = new StringBuilder();
+
+        body.append("block:").append(deviceId).append(" ").append("\n");
+        change(vm, body.toString());
+    }
+
     @Override
     public void disableAnalytics(String vmId) throws InternalException, CloudException {
         // NO-OP
@@ -171,6 +285,17 @@ public class ServerSupport implements VirtualMachineSupport {
     @Override
     public String getConsoleOutput(@Nonnull String vmId) throws InternalException, CloudException {
         return "";
+    }
+
+    public @Nullable String getDeviceId(@Nonnull VirtualMachine vm, @Nonnull String volumeId) throws CloudException, InternalException {
+        for( int i=0; i<8; i++ ) {
+            String id = (String)vm.getTag("block:" + i);
+
+            if( id != null && id.equals(volumeId) ) {
+                return "block:" + i;
+            }
+        }
+        return null;
     }
 
     @Override
@@ -723,6 +848,14 @@ public class ServerSupport implements VirtualMachineSupport {
         }
         if( vlanId != null ) {
             vm.setProviderVlanId(vlanId);
+        }
+        for( int i=0; i<8; i++ ) {
+            String key = "block:" + i;
+            String value = object.get(key);
+
+            if( value != null ) {
+                vm.setTag(key, value);
+            }
         }
         if( object.containsKey("user") ) {
             String user = object.get("user");

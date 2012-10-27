@@ -17,9 +17,11 @@
 package org.dasein.cloud.cloudsigma.compute;
 
 import org.dasein.cloud.cloudsigma.CloudSigma;
+import org.dasein.cloud.cloudsigma.compute.block.DataDriveSupport;
 import org.dasein.cloud.cloudsigma.compute.image.BootDriveSupport;
 import org.dasein.cloud.cloudsigma.compute.vm.ServerSupport;
 import org.dasein.cloud.compute.AbstractComputeServices;
+import org.dasein.cloud.compute.VolumeSupport;
 
 import javax.annotation.Nonnull;
 
@@ -44,5 +46,10 @@ public class CloudSigmaComputeServices extends AbstractComputeServices {
     @Override
     public @Nonnull ServerSupport getVirtualMachineSupport() {
         return new ServerSupport(provider);
+    }
+
+    @Override
+    public @Nonnull VolumeSupport getVolumeSupport() {
+        return new DataDriveSupport(provider);
     }
 }

@@ -450,7 +450,6 @@ public class BootDriveSupport implements MachineImageSupport {
             throw new CloudSigmaConfigurationException("No region was specified for this request");
         }
         MachineImage image = new MachineImage();
-        Platform platform = null;
 
         image.setProviderRegionId(regionId);
         image.setCurrentState(MachineImageState.PENDING);
@@ -529,11 +528,15 @@ public class BootDriveSupport implements MachineImageSupport {
             image.setArchitecture(Architecture.I64);
         }
         String os = drive.get("os");
+        Platform platform;
 
         if( os != null && !os.equals("") ) {
             platform = Platform.guess(os);
         }
-        if( platform == null || platform.equals(Platform.UNKNOWN) ) {
+        else {
+            return null;  // not a machine image
+        }
+        if( platform.equals(Platform.UNKNOWN) ) {
             platform = Platform.guess(image.getName());
         }
         else if( platform.equals(Platform.UNIX) ) {
