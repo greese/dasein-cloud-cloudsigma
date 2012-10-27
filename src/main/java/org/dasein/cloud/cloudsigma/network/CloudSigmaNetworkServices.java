@@ -17,6 +17,7 @@
 package org.dasein.cloud.cloudsigma.network;
 
 import org.dasein.cloud.cloudsigma.CloudSigma;
+import org.dasein.cloud.cloudsigma.network.vlan.ServerVLANSupport;
 import org.dasein.cloud.network.AbstractNetworkServices;
 
 import javax.annotation.Nonnull;
@@ -32,4 +33,9 @@ public class CloudSigmaNetworkServices extends AbstractNetworkServices {
     private CloudSigma provider;
 
     public CloudSigmaNetworkServices(@Nonnull CloudSigma provider) { this.provider = provider; }
+
+    @Override
+    public @Nonnull ServerVLANSupport getVlanSupport() {
+        return new ServerVLANSupport(provider);
+    }
 }
