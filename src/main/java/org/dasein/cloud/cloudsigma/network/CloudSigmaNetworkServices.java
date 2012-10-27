@@ -17,6 +17,7 @@
 package org.dasein.cloud.cloudsigma.network;
 
 import org.dasein.cloud.cloudsigma.CloudSigma;
+import org.dasein.cloud.cloudsigma.network.ip.StaticIPSupport;
 import org.dasein.cloud.cloudsigma.network.vlan.ServerVLANSupport;
 import org.dasein.cloud.network.AbstractNetworkServices;
 
@@ -33,6 +34,11 @@ public class CloudSigmaNetworkServices extends AbstractNetworkServices {
     private CloudSigma provider;
 
     public CloudSigmaNetworkServices(@Nonnull CloudSigma provider) { this.provider = provider; }
+
+    @Override
+    public @Nonnull StaticIPSupport getIpAddressSupport() {
+        return new StaticIPSupport(provider);
+    }
 
     @Override
     public @Nonnull ServerVLANSupport getVlanSupport() {

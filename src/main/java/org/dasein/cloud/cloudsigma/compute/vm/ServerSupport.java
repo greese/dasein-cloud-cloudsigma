@@ -38,6 +38,7 @@ import org.dasein.cloud.compute.VmState;
 import org.dasein.cloud.compute.VmStatistics;
 import org.dasein.cloud.compute.Volume;
 import org.dasein.cloud.identity.ServiceAction;
+import org.dasein.cloud.network.IpAddress;
 import org.dasein.util.CalendarWrapper;
 import org.dasein.util.uom.storage.Gigabyte;
 import org.dasein.util.uom.storage.Megabyte;
@@ -54,6 +55,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.TreeSet;
 
 /**
  * Provides access to virtual machines in CloudSigma.
@@ -69,6 +71,18 @@ public class ServerSupport implements VirtualMachineSupport {
 
     public ServerSupport(@Nonnull CloudSigma provider) { this.provider = provider; }
 
+
+    public void assignIP(@Nonnull String serverId, @Nonnull IpAddress address) throws CloudException, InternalException {
+        VirtualMachine vm = getVirtualMachine(serverId);
+
+        if( vm == null ) {
+            throw new CloudException("No such virtual machine: " + serverId);
+        }
+        StringBuilder body = new StringBuilder();
+
+        body.append("nic:0:dhcp ").append(address.getProviderIpAddressId()).append("\n");
+        change(vm, body.toString());
+    }
 
     public void attach(@Nonnull Volume volume, @Nonnull String serverId, @Nonnull String deviceId) throws CloudException, InternalException {
         if( volume.getProviderVirtualMachineId() != null ) {
@@ -124,7 +138,7 @@ public class ServerSupport implements VirtualMachineSupport {
             }
             if( restart ) {
                 if( logger.isInfoEnabled() ) {
-                    logger.info("Restarting " + vm.getProviderVirtualMachineId());;
+                    logger.info("Restarting " + vm.getProviderVirtualMachineId());
                 }
                 final String id = vm.getProviderVirtualMachineId();
 
@@ -719,6 +733,23 @@ public class ServerSupport implements VirtualMachineSupport {
         start(vmId);
     }
 
+    public void releaseIP(@Nonnull IpAddress address) throws CloudException, InternalException {
+        String serverId = address.getServerId();
+
+        if( serverId == null ) {
+            throw new CloudException("No server is assigned to " + address.getProviderIpAddressId());
+        }
+        VirtualMachine vm = getVirtualMachine(serverId);
+
+        if( vm == null ) {
+            throw new CloudException("No such virtual machine: " + serverId);
+        }
+        StringBuilder body = new StringBuilder();
+
+        body.append("nic:0:dhcp  auto\n");
+        change(vm, body.toString());
+    }
+
     @Override
     public void resume(@Nonnull String vmId) throws CloudException, InternalException {
         throw new OperationNotSupportedException("CloudSigma does not support suspend/resume");
@@ -798,6 +829,52 @@ public class ServerSupport implements VirtualMachineSupport {
         return new String[0];
     }
 
+    private boolean isPublic(@Nonnull String ip) {
+        if( ip.startsWith("127.0.0.") ) {
+            return false;
+        }
+        if( ip.startsWith("10.") ) {
+            return false;
+        }
+        if( ip.startsWith("192.168.")) {
+            return false;
+        }
+        if( ip.startsWith("172.") ) {
+            String[] parts = ip.split("\\.");
+
+            if( parts.length != 4 ) {
+                return true;
+            }
+            try {
+                int x = Integer.parseInt(parts[1]);
+
+                if( x >= 16 && x <33 ) {
+                    return false;
+                }
+            }
+            catch( NumberFormatException ignore ) {
+                // ignore
+            }
+        }
+        return true;
+    }
+
+    private void setIP(@Nonnull VirtualMachine vm, @Nonnull TreeSet<String> ips) {
+        ArrayList<String> pub = new ArrayList<String>();
+        ArrayList<String> priv = new ArrayList<String>();
+
+        for( String ip : ips ) {
+            if( isPublic(ip) ) {
+                pub.add(ip);
+            }
+            else {
+                priv.add(ip);
+            }
+        }
+        vm.setPrivateIpAddresses(priv.toArray(new String[priv.size()]));
+        vm.setPublicIpAddresses(pub.toArray(new String[pub.size()]));
+    }
+
     private @Nullable VirtualMachine toVirtualMachine(@Nullable Map<String,String> object) throws CloudException {
         if( object == null ) {
             return null;
@@ -856,6 +933,29 @@ public class ServerSupport implements VirtualMachineSupport {
             if( value != null ) {
                 vm.setTag(key, value);
             }
+        }
+        TreeSet<String> allIps = new TreeSet<String>();
+        String ip = object.get("nic:0:dhcp");
+
+        if( ip != null && !ip.equals("") && !ip.equals("auto") ) {
+            vm.setProviderAssignedIpAddressId(ip);
+            allIps.add(ip);
+        }
+        ip = object.get("vnc:ip");
+        if( ip != null && !ip.equals("") && !ip.equals("auto") ) {
+            allIps.add(ip);
+        }
+        for( int i=1; i<10; i++ ) {
+            ip = object.get("nic:" + i + ":dhcp");
+            if( ip == null ) {
+                break;
+            }
+            if( ip != null && !ip.equals("") && !ip.equals("auto") ) {
+                allIps.add(ip);
+            }
+        }
+        if( !allIps.isEmpty() ) {
+            setIP(vm, allIps);
         }
         if( object.containsKey("user") ) {
             String user = object.get("user");
