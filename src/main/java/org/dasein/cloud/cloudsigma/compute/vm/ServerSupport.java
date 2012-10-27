@@ -292,7 +292,7 @@ public class ServerSupport implements VirtualMachineSupport {
             String id = (String)vm.getTag("block:" + i);
 
             if( id != null && id.equals(volumeId) ) {
-                return "block:" + i;
+                return String.valueOf(i);
             }
         }
         return null;

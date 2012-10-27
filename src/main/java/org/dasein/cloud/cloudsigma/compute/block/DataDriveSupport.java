@@ -252,18 +252,40 @@ public class DataDriveSupport implements VolumeSupport {
             volume.setProviderVolumeId(id);
         }
 
-        String host = drive.get("host");
+        String host = drive.get("claimed");
 
+        System.out.println("CLAIMED=" +host);
         if( host != null && !host.equals("") ) {
-            VirtualMachine vm = provider.getComputeServices().getVirtualMachineSupport().getVirtualMachine(host);
+            int idx = host.indexOf(":");
 
-            if( vm != null ) {
-                volume.setProviderVirtualMachineId(host);
+            if( idx > -1 && idx < host.length()-1 ) {
+                host = host.substring(idx+1);
+                if( host.startsWith("guest:") ) {
+                    String deviceId = null;
 
-                String deviceId = provider.getComputeServices().getVirtualMachineSupport().getDeviceId(vm, id);
+                    host = host.substring(6);
+                    System.out.println("HOST PIECE=" + host);
+                    idx = host.indexOf(":");
+                    if( idx > -1 && idx < host.length()-1 ) {
+                        deviceId = host.substring(idx+1);
+                        if( deviceId.startsWith("block:") ) {
+                            deviceId = deviceId.substring(6);
+                        }
+                        host = host.substring(0, idx);
+                    }
+                    System.out.println("HOST=" + host);
+                    System.out.println("DEVICE ID=" + deviceId);
+                    VirtualMachine vm = provider.getComputeServices().getVirtualMachineSupport().getVirtualMachine(host);
 
-                if( deviceId != null ) {
-                    volume.setDeviceId(deviceId);
+                    if( vm != null ) {
+                        volume.setProviderVirtualMachineId(host);
+                        if( deviceId == null ) {
+                            deviceId = provider.getComputeServices().getVirtualMachineSupport().getDeviceId(vm, id);
+                            if( deviceId != null ) {
+                                volume.setDeviceId(deviceId);
+                            }
+                        }
+                    }
                 }
             }
         }
