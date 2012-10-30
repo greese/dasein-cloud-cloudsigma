@@ -219,7 +219,7 @@
                 </property>
             </systemProperties> 
           <includes>
-            <include>**/CloudSigmaTestSuite.java</include> 
+            <!-- <include>**/CloudSigmaTestSuite.java</include> -->
           </includes>
         </configuration>
       </plugin> 
