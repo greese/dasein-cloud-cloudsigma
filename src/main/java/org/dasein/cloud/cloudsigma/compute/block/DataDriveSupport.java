@@ -254,7 +254,6 @@ public class DataDriveSupport implements VolumeSupport {
 
         String host = drive.get("claimed");
 
-        System.out.println("CLAIMED=" +host);
         if( host != null && !host.equals("") ) {
             int idx = host.indexOf(":");
 
@@ -264,7 +263,6 @@ public class DataDriveSupport implements VolumeSupport {
                     String deviceId = null;
 
                     host = host.substring(6);
-                    System.out.println("HOST PIECE=" + host);
                     idx = host.indexOf(":");
                     if( idx > -1 && idx < host.length()-1 ) {
                         deviceId = host.substring(idx+1);
@@ -273,8 +271,6 @@ public class DataDriveSupport implements VolumeSupport {
                         }
                         host = host.substring(0, idx);
                     }
-                    System.out.println("HOST=" + host);
-                    System.out.println("DEVICE ID=" + deviceId);
                     VirtualMachine vm = provider.getComputeServices().getVirtualMachineSupport().getVirtualMachine(host);
 
                     if( vm != null ) {

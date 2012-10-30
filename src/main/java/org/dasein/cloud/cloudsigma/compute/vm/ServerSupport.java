@@ -746,7 +746,7 @@ public class ServerSupport implements VirtualMachineSupport {
         }
         StringBuilder body = new StringBuilder();
 
-        body.append("nic:0:dhcp  auto\n");
+        body.append("nic:0:dhcp \n");
         change(vm, body.toString());
     }
 
@@ -764,9 +764,42 @@ public class ServerSupport implements VirtualMachineSupport {
 
     @Override
     public void stop(@Nonnull String vmId) throws InternalException, CloudException {
-        CloudSigmaMethod method = new CloudSigmaMethod(provider);
+        if( logger.isTraceEnabled() ) {
+            logger.trace("ENTER - " + ServerSupport.class.getName() + ".stop(" + vmId + ")");
+        }
+        try {
+            CloudSigmaMethod method = new CloudSigmaMethod(provider);
 
-        method.getObject(toServerURL(vmId, "shutdown"));
+            method.getObject(toServerURL(vmId, "shutdown"));
+
+            long timeout = System.currentTimeMillis() + (CalendarWrapper.MINUTE * 5L);
+
+            while( System.currentTimeMillis() > timeout ) {
+                try {
+                    VirtualMachine vm = getVirtualMachine(vmId);
+
+                    if( vm == null || VmState.TERMINATED.equals(vm.getCurrentState()) || VmState.STOPPED.equals(vm.getCurrentState()) ) {
+                        return;
+                    }
+                }
+                catch( Throwable ignore ) {
+                    // ignore
+                }
+                try { Thread.sleep(15000L); }
+                catch( InterruptedException ignore ) { }
+            }
+            try {
+                method.getObject(toServerURL(vmId, "stop"));
+            }
+            catch( Throwable t ) {
+                logger.warn("Error forcing a stop: " + t.getMessage());
+            }
+        }
+        finally {
+            if( logger.isTraceEnabled() ) {
+                logger.trace("EXIT - " + ServerSupport.class.getName() + ".stop()");
+            }
+        }
     }
 
     @Override

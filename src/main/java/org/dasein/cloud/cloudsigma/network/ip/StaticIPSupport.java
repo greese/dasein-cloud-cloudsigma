@@ -227,7 +227,6 @@ public class StaticIPSupport implements IpAddressSupport {
     }
 
     private @Nullable IpAddress toIP(@Nullable Map<String,String> object, boolean unassignedOnly) throws CloudException, InternalException {
-        System.out.println("IP: " + object);
         if( object == null ) {
             return null;
         }
@@ -257,6 +256,11 @@ public class StaticIPSupport implements IpAddressSupport {
             address.setIpAddressId(id);
             address.setAddress(id);
         }
+        String host = object.get("claimed");
+
+        if( host != null && !host.equals("") ) {
+            address.setServerId(host);
+        }
 
         String user = object.get("user");
 
@@ -268,7 +272,6 @@ public class StaticIPSupport implements IpAddressSupport {
         if( type != null && !type.equals("") && !type.equals("ip") ) {
             return null;
         }
-        address.setServerId(null); // TODO: find server
         if( address.getServerId() != null && unassignedOnly ) {
             return null;
         }
