@@ -22,6 +22,7 @@ import org.dasein.cloud.InternalException;
 import org.dasein.cloud.OperationNotSupportedException;
 import org.dasein.cloud.ProviderContext;
 import org.dasein.cloud.Requirement;
+import org.dasein.cloud.ResourceStatus;
 import org.dasein.cloud.cloudsigma.CloudSigma;
 import org.dasein.cloud.cloudsigma.CloudSigmaConfigurationException;
 import org.dasein.cloud.cloudsigma.CloudSigmaMethod;
@@ -238,6 +239,12 @@ public class ServerVLANSupport implements VLANSupport {
         return Collections.emptyList();
     }
 
+    @Nonnull
+    @Override
+    public Iterable<ResourceStatus> listNetworkInterfaceStatus() throws CloudException, InternalException {
+        return Collections.emptyList();
+    }
+
     @Override
     public @Nonnull Iterable<NetworkInterface> listNetworkInterfaces() throws CloudException, InternalException {
         return Collections.emptyList();
@@ -271,6 +278,26 @@ public class ServerVLANSupport implements VLANSupport {
     @Override
     public @Nonnull Iterable<IPVersion> listSupportedIPVersions() throws CloudException, InternalException {
         return Collections.singletonList(IPVersion.IPV4);
+    }
+
+    @Override
+    public @Nonnull Iterable<ResourceStatus> listVlanStatus() throws CloudException, InternalException {
+        ArrayList<ResourceStatus> networks = new ArrayList<ResourceStatus>();
+        CloudSigmaMethod method = new CloudSigmaMethod(provider);
+
+        Collection<Map<String,String>> list = method.list("/resources/vlan/info");
+
+        if( list == null ) {
+            throw new CloudException("No VLAN endpoint was found");
+        }
+        for( Map<String,String> object : list ) {
+            ResourceStatus status = toStatus(object);
+
+            if( status != null ) {
+                networks.add(status);
+            }
+        }
+        return networks;
     }
 
     @Override
@@ -340,6 +367,28 @@ public class ServerVLANSupport implements VLANSupport {
     @Override
     public @Nonnull String[] mapServiceAction(@Nonnull ServiceAction action) {
         return new String[0];
+    }
+
+    private @Nullable ResourceStatus toStatus(@Nullable Map<String,String> object) throws CloudException, InternalException {
+        if( object == null ) {
+            return null;
+        }
+        ProviderContext ctx = provider.getContext();
+
+        if( ctx == null ) {
+            throw new NoContextException();
+        }
+        String regionId = ctx.getRegionId();
+
+        if( regionId == null ) {
+            throw new CloudSigmaConfigurationException("No region was specified for this request");
+        }
+        String id = object.get("resource");
+
+        if( id == null || id.equals("") ) {
+            return null;
+        }
+        return new ResourceStatus(id, VLANState.AVAILABLE);
     }
 
     private @Nullable VLAN toVLAN(@Nullable Map<String,String> object) throws CloudException, InternalException {

@@ -22,15 +22,19 @@ import org.dasein.cloud.InternalException;
 import org.dasein.cloud.OperationNotSupportedException;
 import org.dasein.cloud.ProviderContext;
 import org.dasein.cloud.Requirement;
+import org.dasein.cloud.ResourceStatus;
 import org.dasein.cloud.Tag;
 import org.dasein.cloud.cloudsigma.CloudSigma;
 import org.dasein.cloud.cloudsigma.CloudSigmaConfigurationException;
 import org.dasein.cloud.cloudsigma.CloudSigmaMethod;
 import org.dasein.cloud.cloudsigma.NoContextException;
 import org.dasein.cloud.compute.Architecture;
+import org.dasein.cloud.compute.ImageClass;
 import org.dasein.cloud.compute.MachineImage;
 import org.dasein.cloud.compute.Platform;
 import org.dasein.cloud.compute.VMLaunchOptions;
+import org.dasein.cloud.compute.VMScalingCapabilities;
+import org.dasein.cloud.compute.VMScalingOptions;
 import org.dasein.cloud.compute.VirtualMachine;
 import org.dasein.cloud.compute.VirtualMachineProduct;
 import org.dasein.cloud.compute.VirtualMachineSupport;
@@ -172,6 +176,11 @@ public class ServerSupport implements VirtualMachineSupport {
     }
 
     @Override
+    public VirtualMachine alterVirtualMachine(@Nonnull String vmId, @Nonnull VMScalingOptions options) throws InternalException, CloudException {
+        throw new OperationNotSupportedException("VM alteration not yet supported");
+    }
+
+    @Override
     public @Nonnull VirtualMachine clone(final @Nonnull String vmId, @Nonnull String intoDcId, @Nonnull String name, @Nonnull String description, boolean powerOn, @Nullable String... firewallIds) throws InternalException, CloudException {
         VirtualMachine vm = getVirtualMachine(vmId);
 
@@ -260,6 +269,11 @@ public class ServerSupport implements VirtualMachineSupport {
         }
     }
 
+    @Override
+    public @Nullable VMScalingCapabilities describeVerticalScalingCapabilities() throws CloudException, InternalException {
+        return null;
+    }
+
 
     public void detach(@Nonnull Volume volume) throws CloudException, InternalException {
         String serverId = volume.getProviderVirtualMachineId();
@@ -295,10 +309,14 @@ public class ServerSupport implements VirtualMachineSupport {
         // NO-OP
     }
 
-    @Nonnull
     @Override
-    public String getConsoleOutput(@Nonnull String vmId) throws InternalException, CloudException {
+    public @Nonnull String getConsoleOutput(@Nonnull String vmId) throws InternalException, CloudException {
         return "";
+    }
+
+    @Override
+    public int getCostFactor(@Nonnull VmState state) throws InternalException, CloudException {
+        return 100;
     }
 
     public @Nullable String getDeviceId(@Nonnull VirtualMachine vm, @Nonnull String volumeId) throws CloudException, InternalException {
@@ -372,6 +390,11 @@ public class ServerSupport implements VirtualMachineSupport {
     }
 
     @Override
+    public @Nonnull Requirement identifyImageRequirement(@Nonnull ImageClass cls) throws CloudException, InternalException {
+        return (cls.equals(ImageClass.MACHINE) ? Requirement.REQUIRED : Requirement.NONE);
+    }
+
+    @Override
     public @Nonnull Requirement identifyPasswordRequirement() throws CloudException, InternalException {
         return Requirement.OPTIONAL;
     }
@@ -383,6 +406,11 @@ public class ServerSupport implements VirtualMachineSupport {
 
     @Override
     public @Nonnull Requirement identifyShellKeyRequirement() throws CloudException, InternalException {
+        return Requirement.NONE;
+    }
+
+    @Override
+    public @Nonnull Requirement identifyStaticIPRequirement() throws CloudException, InternalException {
         return Requirement.NONE;
     }
 
@@ -683,6 +711,26 @@ public class ServerSupport implements VirtualMachineSupport {
     }
 
     @Override
+    public @Nonnull Iterable<ResourceStatus> listVirtualMachineStatus() throws InternalException, CloudException {
+        CloudSigmaMethod method = new CloudSigmaMethod(provider);
+
+        List<Map<String,String>> objects = method.list("/servers/info");
+
+        if( objects == null ) {
+            throw new CloudException("No servers endpoint found");
+        }
+        ArrayList<ResourceStatus> list = new ArrayList<ResourceStatus>();
+        for( Map<String,String> object : objects ) {
+            ResourceStatus vm = toStatus(object);
+
+            if( vm != null ) {
+                list.add(vm);
+            }
+        }
+        return list;
+    }
+
+    @Override
     public @Nonnull Iterable<VirtualMachine> listVirtualMachines() throws InternalException, CloudException {
         CloudSigmaMethod method = new CloudSigmaMethod(provider);
 
@@ -764,13 +812,19 @@ public class ServerSupport implements VirtualMachineSupport {
 
     @Override
     public void stop(@Nonnull String vmId) throws InternalException, CloudException {
+        stop(vmId, false);
+        stop(vmId, true);
+    }
+
+    @Override
+    public void stop(@Nonnull String vmId, boolean force) throws InternalException, CloudException {
         if( logger.isTraceEnabled() ) {
-            logger.trace("ENTER - " + ServerSupport.class.getName() + ".stop(" + vmId + ")");
+            logger.trace("ENTER - " + ServerSupport.class.getName() + ".stop(" + vmId + "," + force + ")");
         }
         try {
             CloudSigmaMethod method = new CloudSigmaMethod(provider);
 
-            method.getObject(toServerURL(vmId, "shutdown"));
+            method.getObject(toServerURL(vmId, force ? "stop" : "shutdown"));
 
             long timeout = System.currentTimeMillis() + (CalendarWrapper.MINUTE * 5L);
 
@@ -787,12 +841,6 @@ public class ServerSupport implements VirtualMachineSupport {
                 }
                 try { Thread.sleep(15000L); }
                 catch( InterruptedException ignore ) { }
-            }
-            try {
-                method.getObject(toServerURL(vmId, "stop"));
-            }
-            catch( Throwable t ) {
-                logger.warn("Error forcing a stop: " + t.getMessage());
             }
         }
         finally {
@@ -858,6 +906,11 @@ public class ServerSupport implements VirtualMachineSupport {
     }
 
     @Override
+    public void updateTags(@Nonnull String vmId, @Nonnull Tag... tags) throws CloudException, InternalException {
+        // NO-OP
+    }
+
+    @Override
     public @Nonnull String[] mapServiceAction(@Nonnull ServiceAction action) {
         return new String[0];
     }
@@ -906,6 +959,59 @@ public class ServerSupport implements VirtualMachineSupport {
         }
         vm.setPrivateIpAddresses(priv.toArray(new String[priv.size()]));
         vm.setPublicIpAddresses(pub.toArray(new String[pub.size()]));
+    }
+
+
+    private @Nullable ResourceStatus toStatus(@Nullable Map<String,String> object) throws CloudException {
+        if( object == null ) {
+            return null;
+        }
+        ProviderContext ctx = provider.getContext();
+
+        if( ctx == null ) {
+            throw new NoContextException();
+        }
+        String regionId = ctx.getRegionId();
+
+        if( regionId == null ) {
+            throw new CloudSigmaConfigurationException("No region was specified for this request");
+        }
+        String id = null;
+
+        if( object.containsKey("server") ) {
+            id = object.get("server");
+        }
+        if( id == null || id.equals("") ) {
+            return null;
+        }
+        VmState state = VmState.PENDING;
+
+        if( object.containsKey("status") ) {
+            String status = object.get("status");
+
+
+            if( status != null ) {
+                if( status.equalsIgnoreCase("stopped") ) {
+                    state = VmState.STOPPED;
+                }
+                else if( status.equalsIgnoreCase("active") ) {
+                    state = VmState.RUNNING;
+                }
+                else if( status.equalsIgnoreCase("paused") ) {
+                    state = VmState.PAUSED;
+                }
+                else if( status.equalsIgnoreCase("dead") || status.equalsIgnoreCase("dumped") ) {
+                    state = VmState.TERMINATED;
+                }
+                else if( status.startsWith("imaging") ) {
+                    state = VmState.PENDING;
+                }
+                else {
+                    logger.warn("DEBUG: Unknown CloudSigma server status: " + status);
+                }
+            }
+        }
+        return new ResourceStatus(id, state);
     }
 
     private @Nullable VirtualMachine toVirtualMachine(@Nullable Map<String,String> object) throws CloudException {

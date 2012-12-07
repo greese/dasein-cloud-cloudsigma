@@ -21,6 +21,7 @@ import org.dasein.cloud.CloudException;
 import org.dasein.cloud.InternalException;
 import org.dasein.cloud.ProviderContext;
 import org.dasein.cloud.Requirement;
+import org.dasein.cloud.ResourceStatus;
 import org.dasein.cloud.cloudsigma.CloudSigma;
 import org.dasein.cloud.cloudsigma.CloudSigmaConfigurationException;
 import org.dasein.cloud.cloudsigma.CloudSigmaMethod;
@@ -29,6 +30,7 @@ import org.dasein.cloud.compute.Platform;
 import org.dasein.cloud.compute.VirtualMachine;
 import org.dasein.cloud.compute.Volume;
 import org.dasein.cloud.compute.VolumeCreateOptions;
+import org.dasein.cloud.compute.VolumeFormat;
 import org.dasein.cloud.compute.VolumeProduct;
 import org.dasein.cloud.compute.VolumeState;
 import org.dasein.cloud.compute.VolumeSupport;
@@ -74,7 +76,7 @@ public class DataDriveSupport implements VolumeSupport {
 
     @Override
     @Deprecated
-    public @Nonnull String create(@Nonnull String fromSnapshot, @Nonnegative int sizeInGb, @Nonnull String inZone) throws InternalException, CloudException {
+    public @Nonnull String create(@Nullable String fromSnapshot, @Nonnegative int sizeInGb, @Nonnull String inZone) throws InternalException, CloudException {
         String name = "vol-" + System.currentTimeMillis();
 
         //noinspection ConstantConditions
@@ -114,6 +116,11 @@ public class DataDriveSupport implements VolumeSupport {
 
     @Override
     public void detach(@Nonnull String volumeId) throws InternalException, CloudException {
+        detach(volumeId, false);
+    }
+
+    @Override
+    public void detach(@Nonnull String volumeId, boolean force) throws InternalException, CloudException {
         Volume v = getVolume(volumeId);
 
         if( v == null ) {
@@ -179,12 +186,37 @@ public class DataDriveSupport implements VolumeSupport {
     }
 
     @Override
+    public @Nonnull Iterable<VolumeFormat> listSupportedFormats() throws InternalException, CloudException {
+        return Collections.singletonList(VolumeFormat.BLOCK);
+    }
+
+    @Override
     public @Nonnull Iterable<VolumeProduct> listVolumeProducts() throws InternalException, CloudException {
         ArrayList<VolumeProduct> products = new ArrayList<VolumeProduct>();
 
         products.add(VolumeProduct.getInstance("hdd", "HDD", "HDD Affinity", VolumeType.HDD));
         products.add(VolumeProduct.getInstance("ssd", "SSD", "SSD Affinity", VolumeType.SSD));
         return products;
+    }
+
+    @Override
+    public @Nonnull Iterable<ResourceStatus> listVolumeStatus() throws InternalException, CloudException {
+        ArrayList<ResourceStatus> list = new ArrayList<ResourceStatus>();
+        CloudSigmaMethod method = new CloudSigmaMethod(provider);
+
+        List<Map<String,String>> matches = method.list("/drives/info");
+
+        if( matches == null ) {
+            throw new CloudException("Could not identify drive endpoint for CloudSigma");
+        }
+        for( Map<String,String> object : matches ) {
+            ResourceStatus volume = toStatus(object);
+
+            if( volume != null ) {
+                list.add(volume);
+            }
+        }
+        return list;
     }
 
     @Override
@@ -370,6 +402,46 @@ public class DataDriveSupport implements VolumeSupport {
         }
 
         return volume;
+    }
+
+    private @Nullable ResourceStatus toStatus(@Nullable Map<String,String> drive) throws CloudException, InternalException {
+        if( drive == null ) {
+            return null;
+        }
+        ProviderContext ctx = provider.getContext();
+
+        if( ctx == null ) {
+            throw new NoContextException();
+        }
+        String id = drive.get("drive");
+
+        if( id == null || id.equals("") ) {
+            return null;
+        }
+        VolumeState state = VolumeState.PENDING;
+        String s = drive.get("status");
+
+        if( s != null ) {
+            if( s.equalsIgnoreCase("active") ) {
+                state = VolumeState.AVAILABLE;
+            }
+            else if( s.equalsIgnoreCase("inactive") ) {
+                state = VolumeState.DELETED;
+            }
+            else if( s.startsWith("copying") ) {
+                state = VolumeState.PENDING;
+            }
+            else {
+                logger.warn("DEBUG: Unknown drive state for CloudSigma: " + s);
+            }
+        }
+        if( VolumeState.AVAILABLE.equals(state) ) {
+            s = drive.get("imaging");
+            if( s != null ) {
+                state = VolumeState.PENDING;
+            }
+        }
+        return new ResourceStatus(id, state);
     }
 
     private @Nonnull String toDriveURL(@Nonnull String vmId, @Nonnull String action) throws InternalException {

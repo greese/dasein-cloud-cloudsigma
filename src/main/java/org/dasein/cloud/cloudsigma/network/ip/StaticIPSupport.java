@@ -21,6 +21,8 @@ import org.dasein.cloud.CloudException;
 import org.dasein.cloud.InternalException;
 import org.dasein.cloud.OperationNotSupportedException;
 import org.dasein.cloud.ProviderContext;
+import org.dasein.cloud.Requirement;
+import org.dasein.cloud.ResourceStatus;
 import org.dasein.cloud.cloudsigma.CloudSigma;
 import org.dasein.cloud.cloudsigma.CloudSigmaConfigurationException;
 import org.dasein.cloud.cloudsigma.CloudSigmaMethod;
@@ -87,6 +89,11 @@ public class StaticIPSupport implements IpAddressSupport {
     @Override
     public @Nonnull String getProviderTermForIpAddress(@Nonnull Locale locale) {
         return "static IP";
+    }
+
+    @Override
+    public @Nonnull Requirement identifyVlanForVlanIPRequirement() throws CloudException, InternalException {
+        return Requirement.REQUIRED;
     }
 
     @Override
@@ -157,6 +164,28 @@ public class StaticIPSupport implements IpAddressSupport {
     }
 
     @Override
+    public @Nonnull Iterable<ResourceStatus> listIpPoolStatus(@Nonnull IPVersion version) throws InternalException, CloudException {
+        if( version.equals(IPVersion.IPV4) ) {
+            CloudSigmaMethod method = new CloudSigmaMethod(provider);
+            Collection<Map<String,String>> pool = method.list("/resources/ip/info");
+            ArrayList<ResourceStatus> addresses = new ArrayList<ResourceStatus>();
+
+            if( pool == null ) {
+                throw new CloudException("Unable to communicate with CloudSigma endpoint");
+            }
+            for( Map<String,String> object : pool ) {
+                ResourceStatus address = toStatus(object);
+
+                if( address != null ) {
+                    addresses.add(address);
+                }
+            }
+            return addresses;
+        }
+        return Collections.emptyList();
+    }
+
+    @Override
     public @Nonnull Iterable<IpForwardingRule> listRules(@Nonnull String addressId) throws InternalException, CloudException {
         return Collections.emptyList();
     }
@@ -207,7 +236,12 @@ public class StaticIPSupport implements IpAddressSupport {
     }
 
     @Override
-    public @Nonnull String requestForVLAN(IPVersion version) throws InternalException, CloudException {
+    public @Nonnull String requestForVLAN(@Nonnull IPVersion version) throws InternalException, CloudException {
+        throw new OperationNotSupportedException("Requesting for VLANs is not supported");
+    }
+
+    @Override
+    public @Nonnull String requestForVLAN(@Nonnull IPVersion version, @Nonnull String vlanId) throws InternalException, CloudException {
         throw new OperationNotSupportedException("Requesting for VLANs is not supported");
     }
 
@@ -277,6 +311,32 @@ public class StaticIPSupport implements IpAddressSupport {
         }
         return address;
     }
+
+    private @Nullable ResourceStatus toStatus(@Nullable Map<String,String> object) throws CloudException, InternalException {
+        if( object == null ) {
+            return null;
+        }
+        ProviderContext ctx = provider.getContext();
+
+        if( ctx == null ) {
+            throw new NoContextException();
+        }
+        String regionId = ctx.getRegionId();
+
+        if( regionId == null ) {
+            throw new CloudSigmaConfigurationException("No region was specified for this request");
+        }
+        String id = object.get("resource");
+
+        if( id != null && !id.equals("") ) {
+            String host = object.get("claimed");
+            boolean available = (host != null && !host.equals(""));
+
+            return new ResourceStatus(id, available);
+        }
+        return null;
+    }
+
     private @Nonnull String toAddressURL(@Nonnull String addressId, @Nonnull String action) throws InternalException {
         try {
             return ("/resources/ip/" + URLEncoder.encode(addressId, "utf-8") + "/" + action);
