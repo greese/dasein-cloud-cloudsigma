@@ -43,6 +43,7 @@ import org.dasein.cloud.compute.VmStatistics;
 import org.dasein.cloud.compute.Volume;
 import org.dasein.cloud.identity.ServiceAction;
 import org.dasein.cloud.network.IpAddress;
+import org.dasein.cloud.network.RawAddress;
 import org.dasein.util.CalendarWrapper;
 import org.dasein.util.uom.storage.Gigabyte;
 import org.dasein.util.uom.storage.Megabyte;
@@ -400,12 +401,22 @@ public class ServerSupport implements VirtualMachineSupport {
     }
 
     @Override
+    public @Nonnull Requirement identifyPasswordRequirement(Platform platform) throws CloudException, InternalException {
+        return Requirement.OPTIONAL;
+    }
+
+    @Override
     public @Nonnull Requirement identifyRootVolumeRequirement() throws CloudException, InternalException {
         return Requirement.NONE;
     }
 
     @Override
     public @Nonnull Requirement identifyShellKeyRequirement() throws CloudException, InternalException {
+        return Requirement.NONE;
+    }
+
+    @Override
+    public @Nonnull Requirement identifyShellKeyRequirement(Platform platform) throws CloudException, InternalException {
         return Requirement.NONE;
     }
 
@@ -451,7 +462,7 @@ public class ServerSupport implements VirtualMachineSupport {
             logger.trace("ENTER - " + ServerSupport.class.getName() + ".launch(" + withLaunchOptions + ")");
         }
         try {
-            MachineImage img = provider.getComputeServices().getImageSupport().getMachineImage(withLaunchOptions.getMachineImageId());
+            MachineImage img = provider.getComputeServices().getImageSupport().getImage(withLaunchOptions.getMachineImageId());
 
             if( img == null ) {
                 throw new CloudException("No such machine image: " + withLaunchOptions.getMachineImageId());

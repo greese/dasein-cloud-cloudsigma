@@ -27,10 +27,19 @@ import org.dasein.cloud.cloudsigma.CloudSigma;
 import org.dasein.cloud.cloudsigma.CloudSigmaConfigurationException;
 import org.dasein.cloud.cloudsigma.CloudSigmaMethod;
 import org.dasein.cloud.cloudsigma.NoContextException;
+import org.dasein.cloud.compute.ComputeServices;
+import org.dasein.cloud.compute.VirtualMachine;
+import org.dasein.cloud.compute.VirtualMachineSupport;
 import org.dasein.cloud.identity.ServiceAction;
+import org.dasein.cloud.network.Firewall;
+import org.dasein.cloud.network.FirewallSupport;
 import org.dasein.cloud.network.IPVersion;
+import org.dasein.cloud.network.IpAddress;
+import org.dasein.cloud.network.IpAddressSupport;
 import org.dasein.cloud.network.NICCreateOptions;
 import org.dasein.cloud.network.NetworkInterface;
+import org.dasein.cloud.network.NetworkServices;
+import org.dasein.cloud.network.Networkable;
 import org.dasein.cloud.network.RoutingTable;
 import org.dasein.cloud.network.Subnet;
 import org.dasein.cloud.network.VLAN;
@@ -263,6 +272,37 @@ public class ServerVLANSupport implements VLANSupport {
     @Override
     public @Nonnull Iterable<NetworkInterface> listNetworkInterfacesInVLAN(@Nonnull String vlanId) throws CloudException, InternalException {
         return Collections.emptyList();
+    }
+
+    @Override
+    public @Nonnull Iterable<Networkable> listResources(@Nonnull String inVlanId) throws CloudException, InternalException {
+        ArrayList<Networkable> resources = new ArrayList<Networkable>();
+        NetworkServices network = provider.getNetworkServices();
+
+        IpAddressSupport ipSupport = network.getIpAddressSupport();
+
+        if( ipSupport != null ) {
+            for( IPVersion version : ipSupport.listSupportedIPVersions() ) {
+                for( IpAddress addr : ipSupport.listIpPool(version, false) ) {
+                    if( inVlanId.equals(addr.getProviderVlanId()) ) {
+                        resources.add(addr);
+                    }
+                }
+            }
+        }
+        for( RoutingTable table : listRoutingTables(inVlanId) ) {
+            resources.add(table);
+        }
+        ComputeServices compute = provider.getComputeServices();
+        VirtualMachineSupport vmSupport = provider.getComputeServices().getVirtualMachineSupport();
+        Iterable<VirtualMachine> vms = vmSupport.listVirtualMachines();
+
+        for( VirtualMachine vm : vms ) {
+            if( inVlanId.equals(vm.getProviderVlanId()) ) {
+                resources.add(vm);
+            }
+        }
+        return resources;
     }
 
     @Override

@@ -41,7 +41,7 @@ import org.dasein.cloud.compute.Platform;
 import org.dasein.cloud.compute.VirtualMachine;
 import org.dasein.cloud.identity.ServiceAction;
 import org.dasein.util.CalendarWrapper;
-import org.dasein.util.uom.storage.*;
+import org.dasein.util.uom.storage.Storage;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
@@ -276,6 +276,11 @@ public class BootDriveSupport implements MachineImageSupport {
             case RAMDISK: return "ramdisk image";
         }
         return "boot drive";
+    }
+
+    @Override
+    public @Nonnull String getProviderTermForCustomImage(@Nonnull Locale locale, @Nonnull ImageClass cls) {
+        return getProviderTermForImage(locale, cls);
     }
 
     @Override
@@ -565,9 +570,14 @@ public class BootDriveSupport implements MachineImageSupport {
 
     @Override
     public void remove(@Nonnull String machineImageId) throws CloudException, InternalException {
+        remove(machineImageId, false);
+    }
+
+    @Override
+    public void remove(@Nonnull String providerImageId, boolean checkState) throws CloudException, InternalException {
         CloudSigmaMethod method = new CloudSigmaMethod(provider);
 
-        if( method.postString(toDriveURL(machineImageId, "destroy"), "") == null ) {
+        if( method.postString(toDriveURL(providerImageId, "destroy"), "") == null ) {
             throw new CloudException("Unable to identify drives endpoint for removal");
         }
     }
