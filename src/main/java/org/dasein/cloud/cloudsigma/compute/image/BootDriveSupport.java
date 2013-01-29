@@ -22,25 +22,23 @@ import org.dasein.cloud.CloudException;
 import org.dasein.cloud.InternalException;
 import org.dasein.cloud.OperationNotSupportedException;
 import org.dasein.cloud.ProviderContext;
-import org.dasein.cloud.Requirement;
 import org.dasein.cloud.ResourceStatus;
-import org.dasein.cloud.Tag;
 import org.dasein.cloud.cloudsigma.CloudSigma;
 import org.dasein.cloud.cloudsigma.CloudSigmaConfigurationException;
 import org.dasein.cloud.cloudsigma.CloudSigmaMethod;
 import org.dasein.cloud.cloudsigma.NoContextException;
+import org.dasein.cloud.compute.AbstractImageSupport;
 import org.dasein.cloud.compute.Architecture;
 import org.dasein.cloud.compute.ImageClass;
 import org.dasein.cloud.compute.ImageCreateOptions;
+import org.dasein.cloud.compute.ImageFilterOptions;
 import org.dasein.cloud.compute.MachineImage;
 import org.dasein.cloud.compute.MachineImageFormat;
 import org.dasein.cloud.compute.MachineImageState;
-import org.dasein.cloud.compute.MachineImageSupport;
 import org.dasein.cloud.compute.MachineImageType;
 import org.dasein.cloud.compute.Platform;
 import org.dasein.cloud.compute.VirtualMachine;
 import org.dasein.cloud.identity.ServiceAction;
-import org.dasein.util.CalendarWrapper;
 import org.dasein.util.uom.storage.Storage;
 
 import javax.annotation.Nonnull;
@@ -62,12 +60,15 @@ import java.util.Map;
  * @version 2012.09 initial version
  * @since 2012.09
  */
-public class BootDriveSupport implements MachineImageSupport {
+public class BootDriveSupport extends AbstractImageSupport {
     static private final Logger logger = CloudSigma.getLogger(BootDriveSupport.class);
 
     private CloudSigma provider;
 
-    public BootDriveSupport(@Nonnull CloudSigma provider) { this.provider = provider; }
+    public BootDriveSupport(@Nonnull CloudSigma provider) {
+        super(provider);
+        this.provider = provider;
+    }
 
     public @Nonnull Map<String,String> cloneDrive(@Nonnull String driveId, @Nonnull String name, Platform os) throws CloudException, InternalException {
         Map<String,String> currentDrive = getDrive(driveId);
@@ -115,158 +116,50 @@ public class BootDriveSupport implements MachineImageSupport {
     }
 
     @Override
-    public void addImageShare(@Nonnull String providerImageId, @Nonnull String accountNumber) throws CloudException, InternalException {
-        throw new OperationNotSupportedException("No ability to share images");
-    }
+    protected @Nonnull MachineImage capture(@Nonnull ImageCreateOptions options, @Nullable AsynchronousTask<MachineImage> task) throws CloudException, InternalException {
+        String vmId = options.getVirtualMachineId();
 
-    @Override
-    public void addPublicShare(@Nonnull String providerImageId) throws CloudException, InternalException {
-        throw new OperationNotSupportedException("No ability to make images public");
-    }
+        if( vmId == null ) {
+            throw new CloudException("No virtual machine was specified for capture");
+        }
+        VirtualMachine vm;
 
-    @Override
-    public @Nonnull String bundleVirtualMachine(@Nonnull String virtualMachineId, @Nonnull MachineImageFormat format, @Nonnull String bucket, @Nonnull String name) throws CloudException, InternalException {
-        throw new OperationNotSupportedException("Bundling of virtual machines not supported");
-    }
+        vm = provider.getComputeServices().getVirtualMachineSupport().getVirtualMachine(vmId);
+        if( vm == null ) {
+            throw new CloudException("Virtual machine not found: " + options.getVirtualMachineId());
+        }
+        provider.getComputeServices().getVirtualMachineSupport().stop(vmId);
+        String driveId = vm.getProviderMachineImageId();
 
-    @Override
-    public void bundleVirtualMachineAsync(@Nonnull String virtualMachineId, @Nonnull MachineImageFormat format, @Nonnull String bucket, @Nonnull String name, @Nonnull AsynchronousTask<String> trackingTask) throws CloudException, InternalException {
-        throw new OperationNotSupportedException("Bundling of virtual machines not supported");
-    }
-
-    @Override
-    public @Nonnull MachineImage captureImage(@Nonnull ImageCreateOptions options) throws CloudException, InternalException {
         try {
-            VirtualMachine vm;
+            Map<String,String> object = cloneDrive(driveId, options.getName(), vm.getPlatform());
+            String id = object.get("drive");
+            MachineImage img = null;
 
-            vm = provider.getComputeServices().getVirtualMachineSupport().getVirtualMachine(options.getVirtualMachineId());
-            if( vm == null ) {
-                throw new CloudException("Virtual machine not found: " + options.getVirtualMachineId());
+            if( id != null ) {
+                img = getImage(id);
             }
-            provider.getComputeServices().getVirtualMachineSupport().stop(options.getVirtualMachineId());
-            String driveId = vm.getProviderMachineImageId();
-
-            try {
-                Map<String,String> object = cloneDrive(driveId, options.getName(), vm.getPlatform());
-                String id = object.get("drive");
-                MachineImage img = null;
-
-                if( id != null ) {
-                    img = getImage(id);
-                }
-                if( img == null ) {
-                    throw new CloudException("Drive cloning completed, but no ID was provided for clone");
-                }
-                return img;
+            if( img == null ) {
+                throw new CloudException("Drive cloning completed, but no ID was provided for clone");
             }
-            finally {
-                try {
-                    provider.getComputeServices().getVirtualMachineSupport().start(options.getVirtualMachineId());
-                }
-                catch( Throwable ignore ) {
-                    logger.warn("Failed to restart " + options.getVirtualMachineId() + " after drive cloning");
-                }
+            if( task != null ) {
+                task.completeWithResult(img);
             }
+            return img;
         }
         finally {
-            provider.release();
-        }
-    }
-
-    @Override
-    public void captureImageAsync(final @Nonnull ImageCreateOptions options, final @Nonnull AsynchronousTask<MachineImage> task) throws CloudException, InternalException {
-        provider.hold();
-        Thread t = new Thread() {
-            public void run() {
-                try {
-                    VirtualMachine vm;
-
-                    try {
-                        vm = provider.getComputeServices().getVirtualMachineSupport().getVirtualMachine(options.getVirtualMachineId());
-                        if( vm == null ) {
-                            throw new CloudException("Virtual machine not found: " + options.getVirtualMachineId());
-                        }
-                    }
-                    catch( CloudException e ) {
-                        logger.error("Unable to load virtual machine: " + e.getMessage());
-                        task.complete(e);
-                        return;
-                    }
-                    catch( InternalException e ) {
-                        logger.error("Unable to load virtual machine: " + e.getMessage());
-                        task.complete(e);
-                        return;
-                    }
-                    try {
-                        provider.getComputeServices().getVirtualMachineSupport().stop(options.getVirtualMachineId());
-                    }
-                    catch( CloudException e ) {
-                        logger.error("Unable to stop virtual machine: " + e.getMessage());
-                        task.complete(e);
-                        return;
-                    }
-                    catch( InternalException e ) {
-                        logger.error("Unable to stop virtual machine: " + e.getMessage());
-                        task.complete(e);
-                        return;
-                    }
-                    try {
-                        String driveId = vm.getProviderMachineImageId();
-
-                        try {
-                            Map<String,String> object = cloneDrive(driveId, options.getName(), vm.getPlatform());
-                            String id = object.get("drive");
-
-                            if( id != null ) {
-                                task.completeWithResult(getImage(id));
-                            }
-                            else {
-                                throw new CloudException("Drive cloning completed, but no ID was provided for clone");
-                            }
-                        }
-                        catch( CloudException e ) {
-                            logger.error("Unable to stop virtual machine: " + e.getMessage());
-                            task.complete(e);
-                        }
-                        catch( InternalException e ) {
-                            logger.error("Unable to stop virtual machine: " + e.getMessage());
-                            task.complete(e);
-                        }
-                    }
-                    finally {
-                        try {
-                            provider.getComputeServices().getVirtualMachineSupport().start(options.getVirtualMachineId());
-                        }
-                        catch( Throwable ignore ) {
-                            logger.warn("Failed to restart " + options.getVirtualMachineId() + " after drive cloning");
-                        }
-                    }
-                }
-                finally {
-                    provider.release();
-                }
+            try {
+                provider.getComputeServices().getVirtualMachineSupport().start(vmId);
             }
-        };
-
-        t.setName("Image " + options.getVirtualMachineId());
-        t.setDaemon(true);
-        t.start();
+            catch( Throwable ignore ) {
+                logger.warn("Failed to restart " + options.getVirtualMachineId() + " after drive cloning");
+            }
+        }
     }
 
     @Override
     public MachineImage getImage(@Nonnull String providerImageId) throws CloudException, InternalException {
         return toMachineImage(getDrive(providerImageId));
-    }
-
-    @Override
-    @Deprecated
-    public MachineImage getMachineImage(@Nonnull String machineImageId) throws CloudException, InternalException {
-        return toMachineImage(getDrive(machineImageId));
-    }
-
-    @Override
-    public @Nonnull String getProviderTermForImage(@Nonnull Locale locale) {
-        return "drive";
     }
 
     @Override
@@ -276,75 +169,6 @@ public class BootDriveSupport implements MachineImageSupport {
             case RAMDISK: return "ramdisk image";
         }
         return "boot drive";
-    }
-
-    @Override
-    public @Nonnull String getProviderTermForCustomImage(@Nonnull Locale locale, @Nonnull ImageClass cls) {
-        return getProviderTermForImage(locale, cls);
-    }
-
-    @Override
-    public boolean hasPublicLibrary() {
-        return true;
-    }
-
-    @Override
-    public @Nonnull Requirement identifyLocalBundlingRequirement() throws CloudException, InternalException {
-        return Requirement.NONE;
-    }
-
-    @Override
-    @Deprecated
-    public @Nonnull AsynchronousTask<String> imageVirtualMachine(@Nonnull String vmId, @Nullable String name, @Nullable String description) throws CloudException, InternalException {
-        @SuppressWarnings("ConstantConditions") VirtualMachine vm = provider.getComputeServices().getVirtualMachineSupport().getVirtualMachine(vmId);
-
-        if( vm == null ) {
-            throw new CloudException("No such virtual machine: " + vmId);
-        }
-        if( name == null ) {
-            name = vm.getName() + " [capture]";
-        }
-        if( description == null ) {
-            description = name;
-        }
-        final AsynchronousTask<MachineImage> task = new AsynchronousTask<MachineImage>();
-        final AsynchronousTask<String> oldTask = new AsynchronousTask<String>();
-
-        captureImageAsync(ImageCreateOptions.getInstance(vm,  name, description), task);
-
-        final long timeout = System.currentTimeMillis() + (CalendarWrapper.HOUR * 2);
-
-        Thread t = new Thread() {
-            public void run() {
-                while( timeout > System.currentTimeMillis() ) {
-                    try { Thread.sleep(15000L); }
-                    catch( InterruptedException ignore ) { }
-                    oldTask.setPercentComplete(task.getPercentComplete());
-
-                    Throwable error = task.getTaskError();
-                    MachineImage img = task.getResult();
-
-                    if( error != null ) {
-                        oldTask.complete(error);
-                        return;
-                    }
-                    else if( img != null ) {
-                        oldTask.completeWithResult(img.getProviderMachineImageId());
-                        return;
-                    }
-                    else if( task.isComplete() ) {
-                        oldTask.complete(new CloudException("Task completed without info"));
-                        return;
-                    }
-                }
-                oldTask.complete(new CloudException("Image creation task timed out"));
-            }
-        };
-
-        t.setDaemon(true);
-        t.start();
-
-        return oldTask;
     }
 
     @Override
@@ -402,16 +226,30 @@ public class BootDriveSupport implements MachineImageSupport {
     }
 
     @Override
-    public @Nonnull Iterable<MachineImage> listImages(@Nonnull ImageClass cls) throws CloudException, InternalException {
-        if( !cls.equals(ImageClass.MACHINE) ) {
-            return Collections.emptyList();
-        }
+    public @Nonnull Iterable<MachineImage> listImages(@Nullable ImageFilterOptions options) throws CloudException, InternalException {
         ProviderContext ctx = provider.getContext();
 
         if( ctx == null ) {
             throw new NoContextException();
         }
         String me = ctx.getAccountNumber();
+        String account;
+
+        if( options == null ) {
+            account = me;
+        }
+        else {
+            account = options.getAccountNumber();
+            if( account == null ) {
+                account = me;
+            }
+        }
+
+        ImageClass cls = (options == null ? null : options.getImageClass());
+
+        if( cls != null && !cls.equals(ImageClass.MACHINE) ) {
+            return Collections.emptyList();
+        }
 
         ArrayList<MachineImage> list = new ArrayList<MachineImage>();
         CloudSigmaMethod method = new CloudSigmaMethod(provider);
@@ -427,7 +265,7 @@ public class BootDriveSupport implements MachineImageSupport {
             if( id != null && id.trim().equals("") ) {
                 id = null;
             }
-            if( me.equals(id) ) {
+            if( account.equals(id) ) {
                 MachineImage img = toMachineImage(object);
 
                 if( img != null ) {
@@ -436,26 +274,6 @@ public class BootDriveSupport implements MachineImageSupport {
             }
         }
         return list;
-    }
-
-    @Override
-    public @Nonnull Iterable<MachineImage> listImages(@Nonnull ImageClass cls, @Nonnull String ownedBy) throws CloudException, InternalException {
-        if( !cls.equals(ImageClass.MACHINE) ) {
-            return Collections.emptyList();
-        }
-        return listImagesComplete(ownedBy);
-    }
-
-    @Override
-    @Deprecated
-    public @Nonnull Iterable<MachineImage> listMachineImages() throws CloudException, InternalException {
-        return listImages(ImageClass.MACHINE);
-    }
-
-    @Override
-    @Deprecated
-    public @Nonnull Iterable<MachineImage> listMachineImagesOwnedBy(String accountId) throws CloudException, InternalException {
-        return listImagesComplete(accountId);
     }
 
     private @Nonnull Iterable<MachineImage> listImagesComplete(@Nullable String accountId) throws CloudException, InternalException {
@@ -583,21 +401,6 @@ public class BootDriveSupport implements MachineImageSupport {
     }
 
     @Override
-    public void removeAllImageShares(@Nonnull String providerImageId) throws CloudException, InternalException {
-        throw new OperationNotSupportedException("Image sharing is not supported");
-    }
-
-    @Override
-    public void removeImageShare(@Nonnull String providerImageId, @Nonnull String accountNumber) throws CloudException, InternalException {
-        throw new OperationNotSupportedException("Image sharing is not supported");
-    }
-
-    @Override
-    public void removePublicShare(@Nonnull String providerImageId) throws CloudException, InternalException {
-        throw new OperationNotSupportedException("Image sharing is not supported");
-    }
-
-    @Override
     @Deprecated
     public @Nonnull Iterable<MachineImage> searchMachineImages(@Nullable String keyword, @Nullable Platform platform, @Nullable Architecture architecture) throws CloudException, InternalException {
         ArrayList<MachineImage> list = new ArrayList<MachineImage>();
@@ -654,11 +457,6 @@ public class BootDriveSupport implements MachineImageSupport {
     }
 
     @Override
-    public void shareMachineImage(@Nonnull String machineImageId, @Nullable String withAccountId, boolean allow) throws CloudException, InternalException {
-        throw new OperationNotSupportedException("CloudSigma does not support machine image sharing");
-    }
-
-    @Override
     public boolean supportsCustomImages() {
         return true;
     }
@@ -670,42 +468,12 @@ public class BootDriveSupport implements MachineImageSupport {
 
     @Override
     public boolean supportsImageCapture(@Nonnull MachineImageType type) throws CloudException, InternalException {
-        return true;
-    }
-
-    @Override
-    public boolean supportsImageSharing() {
-        return false;
-    }
-
-    @Override
-    public boolean supportsImageSharingWithPublic() {
-        return false;
+        return type.equals(MachineImageType.VOLUME);
     }
 
     @Override
     public boolean supportsPublicLibrary(@Nonnull ImageClass cls) throws CloudException, InternalException {
-        return true;
-    }
-
-    @Override
-    public void updateTags(@Nonnull String imageId, @Nonnull Tag... tags) throws CloudException, InternalException {
-        // NO-OP
-    }
-
-    @Override
-    public void updateTags(@Nonnull String[] imageIds, @Nonnull Tag... tags) throws CloudException, InternalException {
-        //NO-OP
-    }
-
-    @Override
-    public void removeTags(@Nonnull String imageId, @Nonnull Tag... tags) throws CloudException, InternalException {
-        // NO-OP
-    }
-
-    @Override
-    public void removeTags(@Nonnull String[] imageIds, @Nonnull Tag... tags) throws CloudException, InternalException {
-        // NO-OP
+        return cls.equals(ImageClass.MACHINE);
     }
 
     @Override

@@ -27,12 +27,10 @@ import org.dasein.cloud.cloudsigma.CloudSigma;
 import org.dasein.cloud.cloudsigma.CloudSigmaConfigurationException;
 import org.dasein.cloud.cloudsigma.CloudSigmaMethod;
 import org.dasein.cloud.cloudsigma.NoContextException;
-import org.dasein.cloud.compute.ComputeServices;
 import org.dasein.cloud.compute.VirtualMachine;
 import org.dasein.cloud.compute.VirtualMachineSupport;
 import org.dasein.cloud.identity.ServiceAction;
-import org.dasein.cloud.network.Firewall;
-import org.dasein.cloud.network.FirewallSupport;
+import org.dasein.cloud.network.AbstractVLANSupport;
 import org.dasein.cloud.network.IPVersion;
 import org.dasein.cloud.network.IpAddress;
 import org.dasein.cloud.network.IpAddressSupport;
@@ -42,9 +40,9 @@ import org.dasein.cloud.network.NetworkServices;
 import org.dasein.cloud.network.Networkable;
 import org.dasein.cloud.network.RoutingTable;
 import org.dasein.cloud.network.Subnet;
+import org.dasein.cloud.network.SubnetCreateOptions;
 import org.dasein.cloud.network.VLAN;
 import org.dasein.cloud.network.VLANState;
-import org.dasein.cloud.network.VLANSupport;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
@@ -63,7 +61,7 @@ import java.util.Map;
  * @version 2012.09 initial version
  * @since 2012.09
  */
-public class ServerVLANSupport implements VLANSupport {
+public class ServerVLANSupport extends AbstractVLANSupport {
     static private final Logger logger = CloudSigma.getLogger(ServerVLANSupport.class);
 
     private CloudSigma provider;
@@ -136,7 +134,7 @@ public class ServerVLANSupport implements VLANSupport {
     }
 
     @Override
-    public @Nonnull Subnet createSubnet(@Nonnull String cidr, @Nonnull String inProviderVlanId, @Nonnull String name, @Nonnull String description) throws CloudException, InternalException {
+    public @Nonnull Subnet createSubnet(@Nonnull SubnetCreateOptions options) throws CloudException, InternalException {
         throw new OperationNotSupportedException("Subnets are not supported");
     }
 
@@ -293,7 +291,6 @@ public class ServerVLANSupport implements VLANSupport {
         for( RoutingTable table : listRoutingTables(inVlanId) ) {
             resources.add(table);
         }
-        ComputeServices compute = provider.getComputeServices();
         VirtualMachineSupport vmSupport = provider.getComputeServices().getVirtualMachineSupport();
         Iterable<VirtualMachine> vms = vmSupport.listVirtualMachines();
 

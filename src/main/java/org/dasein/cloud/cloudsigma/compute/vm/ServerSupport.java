@@ -32,6 +32,7 @@ import org.dasein.cloud.compute.Architecture;
 import org.dasein.cloud.compute.ImageClass;
 import org.dasein.cloud.compute.MachineImage;
 import org.dasein.cloud.compute.Platform;
+import org.dasein.cloud.compute.VMFilterOptions;
 import org.dasein.cloud.compute.VMLaunchOptions;
 import org.dasein.cloud.compute.VMScalingCapabilities;
 import org.dasein.cloud.compute.VMScalingOptions;
@@ -43,7 +44,6 @@ import org.dasein.cloud.compute.VmStatistics;
 import org.dasein.cloud.compute.Volume;
 import org.dasein.cloud.identity.ServiceAction;
 import org.dasein.cloud.network.IpAddress;
-import org.dasein.cloud.network.RawAddress;
 import org.dasein.util.CalendarWrapper;
 import org.dasein.util.uom.storage.Gigabyte;
 import org.dasein.util.uom.storage.Megabyte;
@@ -743,6 +743,11 @@ public class ServerSupport implements VirtualMachineSupport {
 
     @Override
     public @Nonnull Iterable<VirtualMachine> listVirtualMachines() throws InternalException, CloudException {
+        return listVirtualMachines(null);
+    }
+
+    @Override
+    public @Nonnull Iterable<VirtualMachine> listVirtualMachines(@Nullable VMFilterOptions options) throws InternalException, CloudException {
         CloudSigmaMethod method = new CloudSigmaMethod(provider);
 
         List<Map<String,String>> objects = method.list("/servers/info");
@@ -755,7 +760,33 @@ public class ServerSupport implements VirtualMachineSupport {
             VirtualMachine vm = toVirtualMachine(object);
 
             if( vm != null ) {
-                list.add(vm);
+                if( options == null ) {
+                    list.add(vm);
+                }
+                else {
+                    Map<String, String> tags = options.getTags();
+
+                    if( tags == null || tags.isEmpty() ) {
+                        list.add(vm);
+                    }
+                    else {
+                        boolean matches = true;
+
+                        for( Map.Entry<String,String> entry : tags.entrySet() ) {
+                            if( entry.getKey().equals("Name") && vm.getName().toLowerCase().contains(entry.getValue().toLowerCase()) ) {
+                                continue;
+                            }
+                            if( entry.getKey().equals("Description") && vm.getDescription().toLowerCase().contains(entry.getValue().toLowerCase()) ) {
+                                continue;
+                            }
+                            matches = false;
+                            break;
+                        }
+                        if( matches ) {
+                            list.add(vm);
+                        }
+                    }
+                }
             }
         }
         return list;
