@@ -28,28 +28,26 @@ import org.dasein.cloud.cloudsigma.CloudSigma;
 import org.dasein.cloud.cloudsigma.CloudSigmaConfigurationException;
 import org.dasein.cloud.cloudsigma.CloudSigmaMethod;
 import org.dasein.cloud.cloudsigma.NoContextException;
+import org.dasein.cloud.compute.AbstractVMSupport;
 import org.dasein.cloud.compute.Architecture;
 import org.dasein.cloud.compute.ImageClass;
 import org.dasein.cloud.compute.MachineImage;
 import org.dasein.cloud.compute.Platform;
-import org.dasein.cloud.compute.VMFilterOptions;
 import org.dasein.cloud.compute.VMLaunchOptions;
 import org.dasein.cloud.compute.VMScalingCapabilities;
 import org.dasein.cloud.compute.VMScalingOptions;
 import org.dasein.cloud.compute.VirtualMachine;
 import org.dasein.cloud.compute.VirtualMachineProduct;
-import org.dasein.cloud.compute.VirtualMachineSupport;
 import org.dasein.cloud.compute.VmState;
-import org.dasein.cloud.compute.VmStatistics;
 import org.dasein.cloud.compute.Volume;
 import org.dasein.cloud.identity.ServiceAction;
 import org.dasein.cloud.network.IpAddress;
+import org.dasein.cloud.network.RawAddress;
 import org.dasein.util.CalendarWrapper;
 import org.dasein.util.uom.storage.Gigabyte;
 import org.dasein.util.uom.storage.Megabyte;
 import org.dasein.util.uom.storage.Storage;
 
-import javax.annotation.Nonnegative;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import java.io.UnsupportedEncodingException;
@@ -69,12 +67,15 @@ import java.util.TreeSet;
  * @version 2012.09 initial version
  * @since 2012.09
  */
-public class ServerSupport implements VirtualMachineSupport {
+public class ServerSupport extends AbstractVMSupport {
     static private final Logger logger = CloudSigma.getLogger(ServerSupport.class);
 
     private CloudSigma provider;
 
-    public ServerSupport(@Nonnull CloudSigma provider) { this.provider = provider; }
+    public ServerSupport(@Nonnull CloudSigma provider) {
+        super(provider);
+        this.provider = provider;
+    }
 
 
     public void assignIP(@Nonnull String serverId, @Nonnull IpAddress address) throws CloudException, InternalException {
@@ -300,26 +301,6 @@ public class ServerSupport implements VirtualMachineSupport {
         change(vm, body.toString());
     }
 
-    @Override
-    public void disableAnalytics(String vmId) throws InternalException, CloudException {
-        // NO-OP
-    }
-
-    @Override
-    public void enableAnalytics(String vmId) throws InternalException, CloudException {
-        // NO-OP
-    }
-
-    @Override
-    public @Nonnull String getConsoleOutput(@Nonnull String vmId) throws InternalException, CloudException {
-        return "";
-    }
-
-    @Override
-    public int getCostFactor(@Nonnull VmState state) throws InternalException, CloudException {
-        return 100;
-    }
-
     public @Nullable String getDeviceId(@Nonnull VirtualMachine vm, @Nonnull String volumeId) throws CloudException, InternalException {
         for( int i=0; i<8; i++ ) {
             String id = (String)vm.getTag("block:" + i);
@@ -329,11 +310,6 @@ public class ServerSupport implements VirtualMachineSupport {
             }
         }
         return null;
-    }
-
-    @Override
-    public int getMaximumVirtualMachineCount() throws CloudException, InternalException {
-        return -2;
     }
 
     @Override
@@ -381,23 +357,8 @@ public class ServerSupport implements VirtualMachineSupport {
     }
 
     @Override
-    public VmStatistics getVMStatistics(String vmId, long from, long to) throws InternalException, CloudException {
-        return null;
-    }
-
-    @Override
-    public @Nonnull Iterable<VmStatistics> getVMStatisticsForPeriod(@Nonnull String vmId, @Nonnegative long from, @Nonnegative long to) throws InternalException, CloudException {
-        return Collections.emptyList();
-    }
-
-    @Override
     public @Nonnull Requirement identifyImageRequirement(@Nonnull ImageClass cls) throws CloudException, InternalException {
         return (cls.equals(ImageClass.MACHINE) ? Requirement.REQUIRED : Requirement.NONE);
-    }
-
-    @Override
-    public @Nonnull Requirement identifyPasswordRequirement() throws CloudException, InternalException {
-        return Requirement.OPTIONAL;
     }
 
     @Override
@@ -407,11 +368,6 @@ public class ServerSupport implements VirtualMachineSupport {
 
     @Override
     public @Nonnull Requirement identifyRootVolumeRequirement() throws CloudException, InternalException {
-        return Requirement.NONE;
-    }
-
-    @Override
-    public @Nonnull Requirement identifyShellKeyRequirement() throws CloudException, InternalException {
         return Requirement.NONE;
     }
 
@@ -645,38 +601,6 @@ public class ServerSupport implements VirtualMachineSupport {
     }
 
     @Override
-    public @Nonnull VirtualMachine launch(@Nonnull String fromMachineImageId, @Nonnull VirtualMachineProduct product, @Nonnull String dataCenterId, @Nonnull String name, @Nonnull String description, @Nullable String withKeypairId, @Nullable String inVlanId, boolean withAnalytics, boolean asSandbox, @Nullable String... firewallIds) throws InternalException, CloudException {
-        return launch(fromMachineImageId, product, dataCenterId, name, description, withKeypairId, inVlanId, withAnalytics, asSandbox, firewallIds, new Tag[0]);
-    }
-
-    @Override
-    public @Nonnull VirtualMachine launch(@Nonnull String fromMachineImageId, @Nonnull VirtualMachineProduct product, @Nonnull String dataCenterId, @Nonnull String name, @Nonnull String description, @Nullable String withKeypairId, @Nullable String inVlanId, boolean withAnalytics, boolean asSandbox, @Nullable String[] firewallIds, @Nullable Tag... tags) throws InternalException, CloudException {
-        VMLaunchOptions cfg = VMLaunchOptions.getInstance(product.getProviderProductId(), fromMachineImageId, name, description);
-
-        if( withKeypairId != null ) {
-            cfg.withBoostrapKey(withKeypairId);
-        }
-        if( inVlanId != null ) {
-            cfg.inVlan(null, dataCenterId, inVlanId);
-        }
-        else {
-            cfg.inDataCenter(dataCenterId);
-        }
-        if( withAnalytics ) {
-            cfg.withExtendedAnalytics();
-        }
-        if( firewallIds != null && firewallIds.length > 0 ) {
-            cfg.behindFirewalls(firewallIds);
-        }
-        if( tags != null && tags.length > 0 ) {
-            for( Tag t : tags ) {
-                cfg.withMetaData(t.getKey(), t.getValue());
-            }
-        }
-        return launch(cfg);
-    }
-
-    @Override
     public @Nonnull Iterable<String> listFirewalls(@Nonnull String vmId) throws InternalException, CloudException {
         return Collections.emptyList();
     }
@@ -743,11 +667,6 @@ public class ServerSupport implements VirtualMachineSupport {
 
     @Override
     public @Nonnull Iterable<VirtualMachine> listVirtualMachines() throws InternalException, CloudException {
-        return listVirtualMachines(null);
-    }
-
-    @Override
-    public @Nonnull Iterable<VirtualMachine> listVirtualMachines(@Nullable VMFilterOptions options) throws InternalException, CloudException {
         CloudSigmaMethod method = new CloudSigmaMethod(provider);
 
         List<Map<String,String>> objects = method.list("/servers/info");
@@ -760,33 +679,7 @@ public class ServerSupport implements VirtualMachineSupport {
             VirtualMachine vm = toVirtualMachine(object);
 
             if( vm != null ) {
-                if( options == null ) {
-                    list.add(vm);
-                }
-                else {
-                    Map<String, String> tags = options.getTags();
-
-                    if( tags == null || tags.isEmpty() ) {
-                        list.add(vm);
-                    }
-                    else {
-                        boolean matches = true;
-
-                        for( Map.Entry<String,String> entry : tags.entrySet() ) {
-                            if( entry.getKey().equals("Name") && vm.getName().toLowerCase().contains(entry.getValue().toLowerCase()) ) {
-                                continue;
-                            }
-                            if( entry.getKey().equals("Description") && vm.getDescription().toLowerCase().contains(entry.getValue().toLowerCase()) ) {
-                                continue;
-                            }
-                            matches = false;
-                            break;
-                        }
-                        if( matches ) {
-                            list.add(vm);
-                        }
-                    }
-                }
+                list.add(vm);
             }
         }
         return list;
@@ -853,12 +746,6 @@ public class ServerSupport implements VirtualMachineSupport {
     }
 
     @Override
-    public void stop(@Nonnull String vmId) throws InternalException, CloudException {
-        stop(vmId, false);
-        stop(vmId, true);
-    }
-
-    @Override
     public void stop(@Nonnull String vmId, boolean force) throws InternalException, CloudException {
         if( logger.isTraceEnabled() ) {
             logger.trace("ENTER - " + ServerSupport.class.getName() + ".stop(" + vmId + "," + force + ")");
@@ -890,11 +777,6 @@ public class ServerSupport implements VirtualMachineSupport {
                 logger.trace("EXIT - " + ServerSupport.class.getName() + ".stop()");
             }
         }
-    }
-
-    @Override
-    public boolean supportsAnalytics() throws CloudException, InternalException {
-        return false;
     }
 
     @Override
@@ -1003,19 +885,19 @@ public class ServerSupport implements VirtualMachineSupport {
     }
 
     private void setIP(@Nonnull VirtualMachine vm, @Nonnull TreeSet<String> ips) {
-        ArrayList<String> pub = new ArrayList<String>();
-        ArrayList<String> priv = new ArrayList<String>();
+        ArrayList<RawAddress> pub = new ArrayList<RawAddress>();
+        ArrayList<RawAddress> priv = new ArrayList<RawAddress>();
 
         for( String ip : ips ) {
             if( isPublic(ip) ) {
-                pub.add(ip);
+                pub.add(new RawAddress(ip));
             }
             else {
-                priv.add(ip);
+                priv.add(new RawAddress(ip));
             }
         }
-        vm.setPrivateIpAddresses(priv.toArray(new String[priv.size()]));
-        vm.setPublicIpAddresses(pub.toArray(new String[pub.size()]));
+        vm.setPrivateAddresses(priv.toArray(new RawAddress[priv.size()]));
+        vm.setPublicAddresses(pub.toArray(new RawAddress[pub.size()]));
     }
 
 
