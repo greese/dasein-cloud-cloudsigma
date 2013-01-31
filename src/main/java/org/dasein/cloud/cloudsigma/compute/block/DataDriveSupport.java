@@ -26,6 +26,7 @@ import org.dasein.cloud.cloudsigma.CloudSigma;
 import org.dasein.cloud.cloudsigma.CloudSigmaConfigurationException;
 import org.dasein.cloud.cloudsigma.CloudSigmaMethod;
 import org.dasein.cloud.cloudsigma.NoContextException;
+import org.dasein.cloud.compute.AbstractVolumeSupport;
 import org.dasein.cloud.compute.Platform;
 import org.dasein.cloud.compute.VirtualMachine;
 import org.dasein.cloud.compute.Volume;
@@ -33,12 +34,10 @@ import org.dasein.cloud.compute.VolumeCreateOptions;
 import org.dasein.cloud.compute.VolumeFormat;
 import org.dasein.cloud.compute.VolumeProduct;
 import org.dasein.cloud.compute.VolumeState;
-import org.dasein.cloud.compute.VolumeSupport;
 import org.dasein.cloud.compute.VolumeType;
 import org.dasein.cloud.identity.ServiceAction;
 import org.dasein.util.uom.storage.*;
 
-import javax.annotation.Nonnegative;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import java.io.UnsupportedEncodingException;
@@ -57,12 +56,15 @@ import java.util.Map;
  * @version 2012.09 initial version
  * @since 2012.09
  */
-public class DataDriveSupport implements VolumeSupport {
+public class DataDriveSupport extends AbstractVolumeSupport {
     static private final Logger logger = CloudSigma.getLogger(DataDriveSupport.class);
 
     private CloudSigma provider;
 
-    public DataDriveSupport(@Nonnull CloudSigma provider) { this.provider = provider; }
+    public DataDriveSupport(@Nonnull CloudSigma provider) {
+        super(provider);
+        this.provider = provider;
+    }
 
     @Override
     public void attach(@Nonnull String volumeId, @Nonnull String toServer, @Nonnull String deviceId) throws InternalException, CloudException {
@@ -72,20 +74,6 @@ public class DataDriveSupport implements VolumeSupport {
             throw new CloudException("No such volume: " + volumeId);
         }
         provider.getComputeServices().getVirtualMachineSupport().attach(v, toServer, deviceId);
-    }
-
-    @Override
-    @Deprecated
-    public @Nonnull String create(@Nullable String fromSnapshot, @Nonnegative int sizeInGb, @Nonnull String inZone) throws InternalException, CloudException {
-        String name = "vol-" + System.currentTimeMillis();
-
-        //noinspection ConstantConditions
-        if( fromSnapshot == null ) {
-            return createVolume(VolumeCreateOptions.getInstance(new Storage<Gigabyte>(sizeInGb, Storage.GIGABYTE), name, name));
-        }
-        else {
-           return createVolume(VolumeCreateOptions.getInstanceForSnapshot(fromSnapshot, new Storage<Gigabyte>(sizeInGb, Storage.GIGABYTE), name, name));
-        }
     }
 
     @Override
@@ -115,11 +103,6 @@ public class DataDriveSupport implements VolumeSupport {
     }
 
     @Override
-    public void detach(@Nonnull String volumeId) throws InternalException, CloudException {
-        detach(volumeId, false);
-    }
-
-    @Override
     public void detach(@Nonnull String volumeId, boolean force) throws InternalException, CloudException {
         Volume v = getVolume(volumeId);
 
@@ -133,16 +116,6 @@ public class DataDriveSupport implements VolumeSupport {
         CloudSigmaMethod method = new CloudSigmaMethod(provider);
 
         return method.getObject(toDriveURL(driveId, "info"));
-    }
-
-    @Override
-    public int getMaximumVolumeCount() throws InternalException, CloudException {
-        return -2;
-    }
-
-    @Override
-    public Storage<Gigabyte> getMaximumVolumeSize() throws InternalException, CloudException {
-        return null;
     }
 
     @Override
