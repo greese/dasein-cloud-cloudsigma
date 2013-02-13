@@ -268,7 +268,7 @@ public class BootDriveSupport extends AbstractImageSupport {
             if( account.equals(id) ) {
                 MachineImage img = toMachineImage(object);
 
-                if( img != null ) {
+                if( img != null && (options == null || options.matches(img)) ) {
                     list.add(img);
                 }
             }
@@ -323,47 +323,6 @@ public class BootDriveSupport extends AbstractImageSupport {
     @Override
     public @Nonnull Iterable<MachineImageFormat> listSupportedFormatsForBundling() throws CloudException, InternalException {
         return Collections.emptyList();
-    }
-
-    private boolean matches(@Nonnull MachineImage image, @Nullable String keyword, @Nullable Platform platform, @Nullable Architecture architecture) {
-        if( architecture != null && !architecture.equals(image.getArchitecture()) ) {
-            return false;
-        }
-        if( platform != null && !platform.equals(Platform.UNKNOWN) ) {
-            Platform mine = image.getPlatform();
-
-            if( platform.isWindows() && !mine.isWindows() ) {
-                return false;
-            }
-            if( platform.isUnix() && !mine.isUnix() ) {
-                return false;
-            }
-            if( platform.isBsd() && !mine.isBsd() ) {
-                return false;
-            }
-            if( platform.isLinux() && !mine.isLinux() ) {
-                return false;
-            }
-            if( platform.equals(Platform.UNIX) ) {
-                if( !mine.isUnix() ) {
-                    return false;
-                }
-            }
-            else if( !platform.equals(mine) ) {
-                return false;
-            }
-        }
-        if( keyword != null ) {
-            keyword = keyword.toLowerCase();
-            if( !image.getDescription().toLowerCase().contains(keyword) ) {
-                if( !image.getName().toLowerCase().contains(keyword) ) {
-                    if( !image.getProviderMachineImageId().toLowerCase().contains(keyword) ) {
-                        return false;
-                    }
-                }
-            }
-        }
-        return true;
     }
 
     @Override
@@ -445,11 +404,11 @@ public class BootDriveSupport extends AbstractImageSupport {
     }
 
     @Override
-    public @Nonnull Iterable<MachineImage> searchPublicImages(@Nullable String keyword, @Nullable Platform platform, @Nullable Architecture architecture, @Nullable ImageClass... imageClasses) throws CloudException, InternalException {
+    public @Nonnull Iterable<MachineImage> searchPublicImages(@Nullable ImageFilterOptions options) throws CloudException, InternalException {
         ArrayList<MachineImage> list = new ArrayList<MachineImage>();
 
         for( MachineImage img : listImagesComplete(null) ) {
-            if( img != null && matches(img, keyword, platform, architecture) ) {
+            if( img != null && (options == null || options.matches(img)) ) {
                 list.add(img);
             }
         }
