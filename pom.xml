@@ -166,6 +166,10 @@
         <configuration>
             <systemProperties>
                 <property>
+                    <name>providerClass</name>
+                    <value>${providerClass}</value>
+                </property>
+                <property>
                     <name>endpoint</name>
                     <value>${endpoint}</value>
                 </property>
@@ -174,11 +178,11 @@
                     <value>${accountNumber}</value>
                 </property>
                 <property>
-                    <name>apiSharedKey</name>
+                    <name>accessPublic</name>
                     <value>${apiSharedKey}</value>
                 </property>
                 <property>
-                    <name>apiSecretKey</name>
+                    <name>accessPrivate</name>
                     <value>${apiSecretKey}</value>
                 </property>
                 <property>
@@ -193,33 +197,9 @@
                     <name>regionId</name>
                     <value>${regionId}</value>
                 </property>
-                <property>
-                    <name>test.region</name>
-                    <value>${test.region}</value>
-                </property>
-                <property>
-                    <name>test.dataCenter</name>
-                    <value>${test.dataCenter}</value>
-                </property>
-                <property>
-                    <name>test.machineImage</name>
-                    <value>${test.machineImage}</value>
-                </property>
-                <property>
-                    <name>test.product</name>
-                    <value>${test.product}</value>
-                </property>
-                <property>
-                    <name>vm.maxLaunchPeriod</name>
-                    <value>${vm.maxLaunchPeriod}</value>
-                </property>
-                <property>
-                    <name>vm.maxChangePeriod</name>
-                    <value>${vm.maxChangePeriod}</value>
-                </property>
-            </systemProperties> 
+            </systemProperties>
           <includes>
-             <include>**/CloudSigmaTestSuite.java</include>
+             <include>**/TestSuite.java</include>
           </includes>
         </configuration>
       </plugin> 
