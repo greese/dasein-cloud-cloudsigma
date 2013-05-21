@@ -22,6 +22,6 @@ package org.dasein.cloud.cloudsigma;
 import junit.framework.Test;
 import org.dasein.cloud.test.GlobalTestSuite;
 
-public class TestSuite extends GlobalTestSuite {
+public class TestSuite {
 
 }
