@@ -1,21 +1,27 @@
 /**
- * ========= CONFIDENTIAL =========
- *
- * Copyright (C) 2012 enStratus Networks Inc - ALL RIGHTS RESERVED
+ * Copyright (C) 2012-2013 Dell, Inc.
+ * See annotations for authorship information
  *
  * ====================================================================
- *  NOTICE: All information contained herein is, and remains the
- *  property of enStratus Networks Inc. The intellectual and technical
- *  concepts contained herein are proprietary to enStratus Networks Inc
- *  and may be covered by U.S. and Foreign Patents, patents in process,
- *  and are protected by trade secret or copyright law. Dissemination
- *  of this information or reproduction of this material is strictly
- *  forbidden unless prior written permission is obtained from
- *  enStratus Networks Inc.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  * ====================================================================
  */
+
 package org.dasein.cloud.cloudsigma.compute.vm;
 
+import org.json.JSONArray;
+import org.json.JSONException;
+import org.json.JSONObject;
 import org.apache.log4j.Logger;
 import org.dasein.cloud.CloudException;
 import org.dasein.cloud.InternalException;
@@ -28,26 +34,16 @@ import org.dasein.cloud.cloudsigma.CloudSigma;
 import org.dasein.cloud.cloudsigma.CloudSigmaConfigurationException;
 import org.dasein.cloud.cloudsigma.CloudSigmaMethod;
 import org.dasein.cloud.cloudsigma.NoContextException;
-import org.dasein.cloud.compute.AbstractVMSupport;
-import org.dasein.cloud.compute.Architecture;
-import org.dasein.cloud.compute.ImageClass;
-import org.dasein.cloud.compute.MachineImage;
-import org.dasein.cloud.compute.Platform;
-import org.dasein.cloud.compute.VMLaunchOptions;
-import org.dasein.cloud.compute.VMScalingCapabilities;
-import org.dasein.cloud.compute.VMScalingOptions;
-import org.dasein.cloud.compute.VirtualMachine;
-import org.dasein.cloud.compute.VirtualMachineProduct;
-import org.dasein.cloud.compute.VmState;
-import org.dasein.cloud.compute.Volume;
+import org.dasein.cloud.compute.*;
 import org.dasein.cloud.identity.ServiceAction;
+import org.dasein.cloud.network.IPVersion;
 import org.dasein.cloud.network.IpAddress;
-import org.dasein.cloud.network.RawAddress;
 import org.dasein.util.CalendarWrapper;
 import org.dasein.util.uom.storage.Gigabyte;
 import org.dasein.util.uom.storage.Megabyte;
 import org.dasein.util.uom.storage.Storage;
 
+import javax.annotation.Nonnegative;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import java.io.UnsupportedEncodingException;
@@ -55,17 +51,17 @@ import java.net.URLEncoder;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
-import java.util.List;
 import java.util.Locale;
-import java.util.Map;
+import java.util.Random;
 import java.util.TreeSet;
 
 /**
  * Provides access to virtual machines in CloudSigma.
- * <p>Created by George Reese: 10/25/12 11:04 PM</p>
+ * <p>Created by Danielle Mayne: 02/19/13 17:04 PM</p>
  * @author George Reese
- * @version 2012.09 initial version
- * @since 2012.09
+ * @author Danielle Mayne
+ * @version 2013.02 initial version
+ * @since 2013.02
  */
 public class ServerSupport extends AbstractVMSupport {
     static private final Logger logger = CloudSigma.getLogger(ServerSupport.class);
@@ -79,71 +75,149 @@ public class ServerSupport extends AbstractVMSupport {
 
 
     public void assignIP(@Nonnull String serverId, @Nonnull IpAddress address) throws CloudException, InternalException {
-        VirtualMachine vm = getVirtualMachine(serverId);
+        VirtualMachine vm = null;
 
-        if( vm == null ) {
-            throw new CloudException("No such virtual machine: " + serverId);
+        CloudSigmaMethod method = new CloudSigmaMethod(provider);
+
+        //dmayne 20130218: use JSON Parsing
+        try {
+            String obj = method.getString(toServerURL(serverId, ""));
+            if (obj != null) {
+                vm = toVirtualMachine(new JSONObject(obj));
+            }
+
+            if (vm == null) {
+                throw new CloudException("No such virtual machine: " + serverId);
+            }
+
+            //check if server needs to be stopped before making changes
+            if (!vm.getCurrentState().equals(VmState.STOPPED)) {
+                stop(vm.getProviderVirtualMachineId());
+                waitForState(vm, CalendarWrapper.MINUTE * 5L, VmState.STOPPED);
+                obj = method.getString(toServerURL(serverId, ""));
+            }
+
+            JSONObject server = new JSONObject(obj);
+            JSONArray nics = server.getJSONArray("nics");
+
+            JSONObject newNic = new JSONObject(), newIP = new JSONObject();
+            newIP.put("ip", address.getProviderIpAddressId());
+            newIP.put("conf", "static");
+            newNic.put("ip_v4_conf", newIP);
+            nics.put(newNic);
+            server.put("nics", nics);
+
+            change(vm, server.toString());
         }
-        StringBuilder body = new StringBuilder();
-
-        body.append("nic:0:dhcp ").append(address.getProviderIpAddressId()).append("\n");
-        change(vm, body.toString());
+        catch (JSONException e) {
+            throw new InternalException(e);
+        }
     }
 
     public void attach(@Nonnull Volume volume, @Nonnull String serverId, @Nonnull String deviceId) throws CloudException, InternalException {
-        if( volume.getProviderVirtualMachineId() != null ) {
+        logger.debug("Device "+deviceId);
+        if ( deviceId.contains("/dev/") ) {
+            logger.debug("Stripping extra text /dev/: "+deviceId.substring(deviceId.indexOf("/dev/")+5));
+            deviceId = deviceId.substring(deviceId.indexOf("/dev/")+5);
+        }
+        if (volume.getProviderVirtualMachineId() != null) {
             throw new CloudException("Volume is already attached to " + volume.getProviderVirtualMachineId());
         }
-        VirtualMachine vm = getVirtualMachine(serverId);
 
-        if( vm == null ) {
-            throw new CloudException("Virtual machine " + serverId + " does not exist");
+        VirtualMachine vm = null;
+
+        CloudSigmaMethod method = new CloudSigmaMethod(provider);
+
+        //dmayne 20130218: use JSON Parsing
+        try {
+            String obj = (method.getString(toServerURL(serverId, "")));
+            if (obj != null) {
+                vm = toVirtualMachine(new JSONObject(obj));
+            }
+
+            if (vm == null) {
+                throw new CloudException("Virtual machine " + serverId + " does not exist");
+            }
+
+            //check if server needs to be stopped before making changes
+            if (!vm.getCurrentState().equals(VmState.STOPPED)) {
+                stop(vm.getProviderVirtualMachineId());
+                waitForState(vm, CalendarWrapper.MINUTE * 5L, VmState.STOPPED);
+                obj = method.getString(toServerURL(serverId, ""));
+            }
+
+            JSONObject server = new JSONObject(obj);
+            JSONArray drives = server.getJSONArray("drives");
+
+            JSONObject newDrive = new JSONObject();
+            //todo remove hardcoded values
+            newDrive.put("boot_order", drives.length()+1);
+            newDrive.put("device", "virtio");
+            // deviceId is always not null here
+            //if (deviceId != null) {
+                newDrive.put("dev_channel", deviceId);
+            //}
+            //else {
+              //  if (drives.length() < 10) {
+                //    newDrive.put("dev_channel", "0:"+drives.length());
+                //} else if (drives.length() < 100) {
+                  //  newDrive.put("dev_channel", (drives.length()/10)+":"+(drives.length()%10));
+                //}
+                //else {
+                  //  throw new CloudException("Maximum drives attached to server "+vm.getProviderVirtualMachineId());
+                //}
+            //}
+            newDrive.put("drive", volume.getProviderVolumeId());
+
+            drives.put(newDrive);
+            server.put("drives", drives);
+
+            change(vm, server.toString());
         }
-
-        StringBuilder body = new StringBuilder();
-
-        body.append("block:").append(deviceId).append(" ").append(volume.getProviderVolumeId()).append("\n");
-        change(vm, body.toString());
+        catch (JSONException e) {
+            throw new InternalException(e);
+        }
     }
 
     private void change(@Nonnull VirtualMachine vm, @Nonnull String body) throws CloudException, InternalException {
-        if( logger.isTraceEnabled() ) {
+        if (logger.isTraceEnabled()) {
             logger.trace("ENTER - " + ServerSupport.class.getName() + ".change(" + vm + "," + body + ")");
         }
         try {
             boolean restart = !VmState.STOPPED.equals(vm.getCurrentState());
             VirtualMachine workingVm = vm;
 
-            if( restart ) {
-                if( logger.isInfoEnabled() ) {
+            if (restart) {
+                if (logger.isInfoEnabled()) {
                     logger.info("Virtual machine " + vm.getProviderVirtualMachineId() + " needs to be stopped prior to change");
                 }
                 stop(vm.getProviderVirtualMachineId());
-                if( logger.isInfoEnabled() ) {
+                if (logger.isInfoEnabled()) {
                     logger.info("Waiting for " + vm.getProviderVirtualMachineId() + " to fully stop");
                 }
                 workingVm = waitForState(workingVm, CalendarWrapper.MINUTE * 10L, VmState.STOPPED);
-                if( workingVm == null ) {
+                if (workingVm == null) {
                     logger.info("Virtual machine " + vm.getProviderVirtualMachineId() + " disappared while waiting for stop");
                     throw new CloudException("Virtual machine " + vm.getProviderVirtualMachineId() + " disappeared before attachment could happen");
                 }
-                if( logger.isInfoEnabled() ) {
+                if (logger.isInfoEnabled()) {
                     logger.info("Done waiting for " + vm.getProviderVirtualMachineId() + ": " + workingVm.getCurrentState());
                 }
             }
             CloudSigmaMethod method = new CloudSigmaMethod(provider);
 
-            if( logger.isInfoEnabled() ) {
-                logger.info("POSTing changes to " + vm.getProviderVirtualMachineId());
+            if (logger.isInfoEnabled()) {
+                logger.info("PUTing changes to " + vm.getProviderVirtualMachineId());
             }
-            if( method.postObject(toServerURL(vm.getProviderVirtualMachineId(), "set"), body) == null ) {
+
+            if (method.putString(toServerURL(vm.getProviderVirtualMachineId(), ""), body) == null) {
                 throw new CloudException("Unable to locate servers endpoint in CloudSigma");
             }
-            if( logger.isInfoEnabled() ) {
+            if (logger.isInfoEnabled()) {
                 logger.info("Change to " + vm.getProviderVirtualMachineId() + " succeeded");
             }
-            if( restart ) {
-                if( logger.isInfoEnabled() ) {
+            if (restart) {
+                if (logger.isInfoEnabled()) {
                     logger.info("Restarting " + vm.getProviderVirtualMachineId());
                 }
                 final String id = vm.getProviderVirtualMachineId();
@@ -153,12 +227,10 @@ public class ServerSupport extends AbstractVMSupport {
                         try {
                             try {
                                 ServerSupport.this.start(id);
-                            }
-                            catch( Exception e ) {
+                            } catch (Exception e) {
                                 logger.warn("Failed to start VM post-change: " + e.getMessage());
                             }
-                        }
-                        finally {
+                        } finally {
                             provider.release();
                         }
                     }
@@ -169,9 +241,8 @@ public class ServerSupport extends AbstractVMSupport {
                 t.setDaemon(true);
                 t.start();
             }
-        }
-        finally {
-            if( logger.isTraceEnabled() ) {
+        } finally {
+            if (logger.isTraceEnabled()) {
                 logger.trace("EXIT - " + ServerSupport.class.getName() + ".change()");
             }
         }
@@ -184,47 +255,54 @@ public class ServerSupport extends AbstractVMSupport {
 
     @Override
     public @Nonnull VirtualMachine clone(final @Nonnull String vmId, @Nonnull String intoDcId, @Nonnull String name, @Nonnull String description, boolean powerOn, @Nullable String... firewallIds) throws InternalException, CloudException {
+        logger.debug("Name: "+name+", description: "+description);
+
         VirtualMachine vm = getVirtualMachine(vmId);
 
-        if( vm == null || VmState.TERMINATED.equals(vm.getCurrentState()) ) {
+        if (vm == null || VmState.TERMINATED.equals(vm.getCurrentState())) {
             throw new CloudException("No such virtual machine to clone: " + vmId);
         }
         long timeout = System.currentTimeMillis() + (CalendarWrapper.MINUTE * 20L);
 
-        if( !VmState.STOPPED.equals(vm.getCurrentState()) ) {
+        if (!VmState.STOPPED.equals(vm.getCurrentState())) {
             stop(vmId);
-            while( timeout > System.currentTimeMillis() ) {
-                if( vm == null || VmState.TERMINATED.equals(vm.getCurrentState()) ) {
+            while (timeout > System.currentTimeMillis()) {
+                if (vm == null || VmState.TERMINATED.equals(vm.getCurrentState())) {
                     throw new CloudException("Virtual machine terminated during stop for cloning");
                 }
-                if( VmState.STOPPED.equals(vm.getCurrentState()) ) {
+                if (VmState.STOPPED.equals(vm.getCurrentState())) {
                     break;
                 }
-                try { Thread.sleep(30000L); }
-                catch( InterruptedException ignore ) { }
-                try { vm = getVirtualMachine(vmId); }
-                catch( Exception ignore ) { }
+                try {
+                    Thread.sleep(30000L);
+                } catch (InterruptedException ignore) {
+                }
+                try {
+                    vm = getVirtualMachine(vmId);
+                } catch (Exception ignore) {
+                }
             }
         }
         try {
-            StringBuilder body = new StringBuilder();
-
-            body.append("name ");
-            body.append(name.replaceAll("\n", " "));
-            body.append("\n");
+            //dmayne 20130222: api 2.0 uses empty body for server clone
 
             CloudSigmaMethod method = new CloudSigmaMethod(provider);
+            vm = null;    // make sure we are looking at the vm in the response
 
-            vm = toVirtualMachine(method.postObject(toServerURL(vmId, "clone"), body.toString()));
-            if( vm == null ) {
+            //dmayne 20130218: use JSON Parsing
+            JSONObject object = new JSONObject(method.postString(toServerURL(vmId, "action/?do=clone"), ""));
+            if (object != null) {
+                vm = toVirtualMachine((JSONObject) object);
+            }
+            if (vm == null) {
                 throw new CloudException("No virtual machine was provided in the response");
             }
-            if( powerOn ) {
-                vm = waitForState(vm, CalendarWrapper.MINUTE*15L, VmState.STOPPED, VmState.RUNNING);
-                if( vm == null ) {
+            if (powerOn) {
+                vm = waitForState(vm, CalendarWrapper.MINUTE * 15L, VmState.STOPPED, VmState.RUNNING);
+                if (vm == null) {
                     throw new CloudException("New VM disappeared");
                 }
-                if( !VmState.RUNNING.equals(vm.getCurrentState()) ) {
+                if (!VmState.RUNNING.equals(vm.getCurrentState())) {
                     final String id = vm.getProviderVirtualMachineId();
 
                     Thread t = new Thread() {
@@ -232,12 +310,10 @@ public class ServerSupport extends AbstractVMSupport {
                             try {
                                 try {
                                     ServerSupport.this.start(id);
-                                }
-                                catch( Exception e ) {
+                                } catch (Exception e) {
                                     logger.warn("Failed to start VM post-create: " + e.getMessage());
                                 }
-                            }
-                            finally {
+                            } finally {
                                 provider.release();
                             }
                         }
@@ -251,15 +327,19 @@ public class ServerSupport extends AbstractVMSupport {
             }
             return vm;
         }
+        catch (JSONException e) {
+            throw new InternalException(e);
+        }
         finally {
             provider.hold();
             Thread t = new Thread() {
                 public void run() {
                     try {
-                        try { ServerSupport.this.start(vmId); }
-                        catch( Throwable ignore ) { }
-                    }
-                    finally {
+                        try {
+                            ServerSupport.this.start(vmId);
+                        } catch (Throwable ignore) {
+                        }
+                    } finally {
                         provider.release();
                     }
                 }
@@ -280,36 +360,92 @@ public class ServerSupport extends AbstractVMSupport {
     public void detach(@Nonnull Volume volume) throws CloudException, InternalException {
         String serverId = volume.getProviderVirtualMachineId();
 
-        if( serverId == null ) {
+        if (serverId == null) {
             throw new CloudException("No server is attached to " + volume.getProviderVolumeId());
         }
 
-        VirtualMachine vm = getVirtualMachine(serverId);
+        VirtualMachine vm = null;
 
-        if( vm == null ) {
-            throw new CloudException("No such virtual machine: " + serverId);
+        CloudSigmaMethod method = new CloudSigmaMethod(provider);
+
+        //dmayne 20130218: use JSON Parsing
+        try {
+            String obj = method.getString(toServerURL(serverId, ""));
+            if (obj != null) {
+                vm = toVirtualMachine(new JSONObject(obj));
+            }
+
+            if (vm == null) {
+                throw new CloudException("No such virtual machine: " + serverId);
+            }
+
+            //check if server needs to be stopped before making changes
+            if (!vm.getCurrentState().equals(VmState.STOPPED)) {
+                stop(vm.getProviderVirtualMachineId());
+                waitForState(vm, CalendarWrapper.MINUTE * 5L, VmState.STOPPED);
+                obj = method.getString(toServerURL(serverId, ""));
+            }
+
+            String driveId = volume.getProviderVolumeId();
+
+            JSONObject json = new JSONObject(obj);
+            JSONArray drives = json.getJSONArray("drives");
+            JSONArray newArray = new JSONArray();
+            int index = 0;
+            for (int i = 0; i < drives.length(); i++) {
+                JSONObject drive = drives.getJSONObject(i);
+                JSONObject driveObj = drive.getJSONObject("drive");
+                if (!driveObj.getString("uuid").equals(driveId)) {
+                    newArray.put(drives.getJSONObject(i));
+                }
+            }
+            json.put("drives", newArray);
+            String jsonBody = json.toString();
+
+            change(vm, jsonBody);
         }
-
-        String deviceId = getDeviceId(vm, volume.getProviderVolumeId());
-
-        if( deviceId == null ) {
-            throw new CloudException("Volume does not appear to be attached null vs " + volume.getDeviceId());
+        catch (JSONException e) {
+            throw new InternalException(e);
         }
-        StringBuilder body = new StringBuilder();
+    }
 
-        body.append("block:").append(deviceId).append(" ").append("\n");
-        change(vm, body.toString());
+    @Override
+    public void disableAnalytics(String vmId) throws InternalException, CloudException {
+        // NO-OP
+    }
+
+    @Override
+    public void enableAnalytics(String vmId) throws InternalException, CloudException {
+        // NO-OP
+    }
+
+    @Override
+    public @Nonnull String getConsoleOutput(@Nonnull String vmId) throws InternalException, CloudException {
+        return "";
+    }
+
+    @Override
+    public int getCostFactor(@Nonnull VmState state) throws InternalException, CloudException {
+        return 100;
     }
 
     public @Nullable String getDeviceId(@Nonnull VirtualMachine vm, @Nonnull String volumeId) throws CloudException, InternalException {
-        for( int i=0; i<8; i++ ) {
-            String id = (String)vm.getTag("block:" + i);
+        for (int i = 0; i <= 9; i++) {
+            for (int j = 0; j <= 9; j++) {
+                String id = (String) vm.getTag("virtio:" + i+":"+j);     //assume all drives added to virtio
 
-            if( id != null && id.equals(volumeId) ) {
-                return String.valueOf(i);
+                if (id != null && id.equals(volumeId)) {
+                    return String.valueOf(i).concat(":").concat(String.valueOf(j));
+                }
             }
         }
+
         return null;
+    }
+
+    @Override
+    public int getMaximumVirtualMachineCount() throws CloudException, InternalException {
+        return -2;
     }
 
     @Override
@@ -317,20 +453,18 @@ public class ServerSupport extends AbstractVMSupport {
         String[] parts = productId.split(":");
         int cpuCount, ramInMb, cpuSpeed;
 
-        if( parts.length < 2 ) {
+        if (parts.length < 2) {
             return null;
         }
         try {
-            if( parts.length == 2 ) {
+            if (parts.length == 2) {
                 cpuCount = 1;
-            }
-            else {
+            } else {
                 cpuCount = Integer.parseInt(parts[2]);
             }
             ramInMb = Integer.parseInt(parts[0]);
             cpuSpeed = Integer.parseInt(parts[1]);
-        }
-        catch( NumberFormatException e ) {
+        } catch (NumberFormatException e) {
             return null;
         }
         VirtualMachineProduct product = new VirtualMachineProduct();
@@ -353,7 +487,17 @@ public class ServerSupport extends AbstractVMSupport {
     public VirtualMachine getVirtualMachine(@Nonnull String vmId) throws InternalException, CloudException {
         CloudSigmaMethod method = new CloudSigmaMethod(provider);
 
-        return toVirtualMachine(method.getObject(toServerURL(vmId, "info")));
+        //dmayne 20130218: use JSON Parsing
+        try {
+            String obj = (method.getString(toServerURL(vmId, "")));
+            if (obj != null) {
+                return toVirtualMachine(new JSONObject(obj));
+            }
+        }
+        catch (JSONException e) {
+            throw  new InternalException(e);
+        }
+        return null;
     }
 
     @Override
@@ -412,215 +556,276 @@ public class ServerSupport extends AbstractVMSupport {
         return false;
     }
 
+    static private final Random random = new Random();
+
+    private @Nonnull String generatePassword() {
+        int len = 8 + random.nextInt(5);
+        StringBuilder password = new StringBuilder();
+
+        while( password.length() < len ) {
+            char c = (char)random.nextInt(255);
+
+            if( (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ) {
+                if( c != 'I' && c != 'i' && c != 'o' && c != 'O' && c != 'l' ) {
+                    password.append(c);
+                }
+            }
+            else if( c >= '2' && c <='9' ) {
+                password.append(c);
+            }
+            else if( c == '%' || c == '@' || c == '#' || c == '$' || c == '[' || c == ']' ) {
+                password.append(c);
+            }
+        }
+        return password.toString();
+    }
+
     @Override
     public @Nonnull VirtualMachine launch(@Nonnull VMLaunchOptions withLaunchOptions) throws CloudException, InternalException {
-        if( logger.isTraceEnabled() ) {
+        logger.debug("Name: "+withLaunchOptions.getHostName()+", description: "+withLaunchOptions.getDescription()
+                +"friendly name: "+withLaunchOptions.getFriendlyName());
+        if (logger.isTraceEnabled()) {
             logger.trace("ENTER - " + ServerSupport.class.getName() + ".launch(" + withLaunchOptions + ")");
         }
         try {
             MachineImage img = provider.getComputeServices().getImageSupport().getImage(withLaunchOptions.getMachineImageId());
 
-            if( img == null ) {
+            if (img == null) {
                 throw new CloudException("No such machine image: " + withLaunchOptions.getMachineImageId());
             }
-            if( logger.isInfoEnabled() ) {
+            if (logger.isInfoEnabled()) {
                 logger.info("Cloning drive from machine image " + img.getProviderMachineImageId() + "...");
             }
-            Map<String,String> drive = provider.getComputeServices().getImageSupport().cloneDrive(withLaunchOptions.getMachineImageId(), withLaunchOptions.getHostName(), null);
+            JSONObject drive = provider.getComputeServices().getImageSupport().cloneDrive(withLaunchOptions.getMachineImageId(), withLaunchOptions.getHostName(), null);
 
-            if( logger.isDebugEnabled() ) {
+            if (logger.isDebugEnabled()) {
                 logger.debug("drive=" + drive);
             }
-            String driveId = drive.get("drive");
-
-            if( driveId == null ) {
-                throw new CloudException("No drive was cloned to support the machine launch process");
-            }
-            long timeout = System.currentTimeMillis() + (CalendarWrapper.MINUTE*20L);
-            String status = drive.get("status");
-
-            if( logger.isInfoEnabled() ) {
-                logger.info("Waiting for new drive " + driveId + " to become active...");
-            }
-            while( timeout > System.currentTimeMillis() ) {
-                if( logger.isDebugEnabled() ) {
-                    logger.debug("status.drive." + driveId + "=" + status);
+            String driveId = null;
+            try {
+                JSONObject actualDrive = null;
+                if (drive.has("objects")) {
+                    JSONArray objects = drive.getJSONArray("objects");
+                    actualDrive = (JSONObject) objects.get(0);
+                    driveId = actualDrive.getString("uuid");
                 }
-                if( status != null && status.equals("active") ) {
-                    if( logger.isInfoEnabled() ) {
-                        logger.info("Drive is now ready for launching");
+
+                if (driveId == null) {
+                    throw new CloudException("No drive was cloned to support the machine launch process");
+                }
+                long timeout = System.currentTimeMillis() + (CalendarWrapper.MINUTE * 40L);
+                String status = actualDrive.getString("status");
+
+                if (logger.isInfoEnabled()) {
+                    logger.info("Waiting for new drive " + driveId + " to become active...");
+                }
+                System.out.println("Got " + driveId + " with " + status);
+                while (timeout > System.currentTimeMillis()) {
+                    if (logger.isDebugEnabled()) {
+                        logger.debug("status.drive." + driveId + "=" + status);
                     }
-                    break;
+                    if (status != null && (status.equals("mounted") || status.equals("unmounted"))) {
+                        if (logger.isInfoEnabled()) {
+                            logger.info("Drive is now ready for launching");
+                        }
+                        break;
+                    }
+                    try {
+                        Thread.sleep(20000L);
+                    } catch (InterruptedException ignore) {
+                    }
+                    try {
+                        actualDrive = provider.getComputeServices().getImageSupport().getDrive(driveId);
+                    } catch (Throwable ignore) {
+                    }
+                    if (actualDrive == null) {
+                        System.out.println("No drive for " + driveId);
+                        throw new CloudException("Cloned drive has disappeared");
+                    }
+                    status = actualDrive.getString("status");
+                    System.out.println(driveId + "=" + status);
                 }
-                try { Thread.sleep(20000L); }
-                catch( InterruptedException ignore ) { }
-                try { drive = provider.getComputeServices().getImageSupport().getDrive(driveId); }
-                catch( Throwable ignore ) { }
-                if( drive == null ) {
-                    throw new CloudException("Cloned drive has disappeared");
+
+                JSONObject newServer = new JSONObject(), newDrive = new JSONObject(), newNic = new JSONObject(), newVlan = new JSONObject();
+                JSONArray drives = new JSONArray(), nics = new JSONArray();
+
+                newServer.put("name", withLaunchOptions.getHostName().replaceAll("\n", " "));
+                String password = withLaunchOptions.getBootstrapPassword();
+
+                if( password == null ) {
+                    password = generatePassword();
                 }
-                status = drive.get("status");
-            }
-            String productId = withLaunchOptions.getStandardProductId();
-            StringBuilder body = new StringBuilder();
+                newServer.put("vnc_password", password);
 
-            body.append("name ");
-            body.append(withLaunchOptions.getHostName().replaceAll("\n", " "));
-            body.append("\nide:0:0 ");
-            body.append(driveId);
-            body.append("\nboot ide:0:0");
-            body.append("\ncpu ");
+                newDrive.put("boot_order", 1);
+                newDrive.put("device", "virtio");
+                newDrive.put("dev_channel", "0:0");
+                newDrive.put("drive", actualDrive.getString("uuid"));
 
-            int cpuCount = 1, cpuSpeed = 1000, ramInMb = 512;
-            String[] parts = productId.replaceAll("\n", " ").split(":");
+                drives.put(newDrive);
 
+                newServer.put("drives", drives);
 
-            if( parts.length > 1 ) {
-                cpuCount = 1;
-                try {
-                    ramInMb = Integer.parseInt(parts[0]);
-                    cpuSpeed = Integer.parseInt(parts[1]);
-                    if( parts.length == 3 ) {
-                        cpuCount = Integer.parseInt(parts[2]);
+                String productId = withLaunchOptions.getStandardProductId();
+                int cpuCount = 1, cpuSpeed = 1000, ramInMb = 512;
+                long ramInBytes = 536870912;
+                String[] parts = productId.replaceAll("\n", " ").split(":");
+                if (parts.length > 1) {
+                    cpuCount = 1;
+                    try {
+                        ramInMb = Integer.parseInt(parts[0]);
+                        ramInBytes = ramInMb * 1024L * 1024L;
+                        cpuSpeed = Integer.parseInt(parts[1]);
+                        if (parts.length == 3) {
+                            cpuCount = Integer.parseInt(parts[2]);
+                            // total speed will be cpuCount * perSMPspeed
+                            cpuSpeed = cpuSpeed*cpuCount;
+                        }
+                    } catch (NumberFormatException ignore) {
+                        // ignore
                     }
                 }
-                catch( NumberFormatException ignore ) {
-                    // ignore
+
+                newServer.put("cpu", String.valueOf(cpuSpeed));
+                newServer.put("mem", String.valueOf(ramInBytes));
+                newServer.put("smp", String.valueOf(cpuCount));
+
+                if (withLaunchOptions.getVlanId() != null) {
+                    newVlan.put("uuid", withLaunchOptions.getVlanId().replaceAll("\n", " "));
+                    newNic.put("vlan", newVlan);
+                    nics.put(newNic);
+                    newServer.put("nics", nics);
                 }
-            }
-            body.append(String.valueOf(cpuSpeed));
-            body.append("\nmem ");
-            body.append(String.valueOf(ramInMb));
-            body.append("\nsmp ");
-            body.append(String.valueOf(cpuCount));
-            if( withLaunchOptions.getVlanId() != null ) {
-                body.append("\nnic:1:vlan ");
-                body.append(withLaunchOptions.getVlanId().replaceAll("\n", " "));
-            }
-            body.append("\n");
 
-            CloudSigmaMethod method = new CloudSigmaMethod(provider);
+                CloudSigmaMethod method = new CloudSigmaMethod(provider);
 
-            if( logger.isInfoEnabled() ) {
-                logger.info("Creating server....");
-            }
-            VirtualMachine vm = toVirtualMachine(method.postObject("/servers/create", body.toString()));
-
-            if( logger.isDebugEnabled() ) {
-                logger.debug("vm=" + vm);
-            }
-            if( vm == null ) {
-                throw new CloudException("No virtual machine was provided in the response");
-            }
-            if( logger.isInfoEnabled() ) {
-                logger.info("Waiting for " + vm.getProviderVirtualMachineId() + " to be STOPPED or RUNNING...");
-            }
-            vm = waitForState(vm, CalendarWrapper.MINUTE*15L, VmState.STOPPED, VmState.RUNNING);
-            if( logger.isDebugEnabled() ) {
-                logger.debug("post wait vm=" + vm);
-            }
-            if( vm == null ) {
-                throw new CloudException("Virtual machine disappeared waiting for startup state");
-            }
-            if( logger.isDebugEnabled() ) {
-                logger.debug("status.vm." + vm.getProviderVirtualMachineId() + "=" + vm.getCurrentState());
-            }
-            if( !VmState.RUNNING.equals(vm.getCurrentState()) ) {
-                if( logger.isInfoEnabled() ) {
-                    logger.info("Setting up a separate thread to start " + vm.getProviderVirtualMachineId() + "...");
+                if (logger.isInfoEnabled()) {
+                    logger.info("Creating server....");
                 }
-                final String id = vm.getProviderVirtualMachineId();
+                //dmayne 20130218: use JSON Parsing
+                VirtualMachine vm = null;
+                JSONObject obj = new JSONObject(method.postString("/servers/", newServer.toString()));
 
-                Thread t = new Thread() {
-                    public void run() {
-                        try {
-                            VirtualMachine vm = null;
+                //dmayne 20130227: check value returned and extract created server from the objects array
+                if (obj != null) {
+                    JSONObject object = (JSONObject) obj;
+                    JSONArray arr = object.getJSONArray("objects");
+                    JSONObject server = arr.getJSONObject(0);
+                    vm = toVirtualMachine((JSONObject) server);
+                }
 
-                            for( int i=0; i<5; i++ ) {
-                                try {
-                                    if( vm == null ) {
-                                        try {
-                                            vm = getVirtualMachine(id);
-                                        }
-                                        catch( Throwable ignore ) {
-                                            // ignore
-                                        }
-                                    }
-                                    if( vm != null ) {
-                                        if( logger.isInfoEnabled() ) {
-                                            logger.info("Verifying the state of " + id);
-                                        }
-                                        vm = waitForState(vm, CalendarWrapper.MINUTE*15L, VmState.STOPPED, VmState.RUNNING);
-                                        if( vm == null || VmState.TERMINATED.equals(vm.getCurrentState()) || VmState.RUNNING.equals(vm.getCurrentState()) ) {
-                                            if( logger.isInfoEnabled() ) {
-                                                logger.info("Pre-emptive return due to non-existence or true running: " + id);
+                if (logger.isDebugEnabled()) {
+                    logger.debug("vm=" + vm);
+                }
+                if (vm == null) {
+                    throw new CloudException("No virtual machine was provided in the response");
+                }
+                if (logger.isInfoEnabled()) {
+                    logger.info("Waiting for " + vm.getProviderVirtualMachineId() + " to be STOPPED or RUNNING...");
+                }
+                vm = waitForState(vm, CalendarWrapper.MINUTE * 15L, VmState.STOPPED, VmState.RUNNING);
+                if (logger.isDebugEnabled()) {
+                    logger.debug("post wait vm=" + vm);
+                }
+                if (vm == null) {
+                    throw new CloudException("Virtual machine disappeared waiting for startup state");
+                }
+                if (logger.isDebugEnabled()) {
+                    logger.debug("status.vm." + vm.getProviderVirtualMachineId() + "=" + vm.getCurrentState());
+                }
+                if (!VmState.RUNNING.equals(vm.getCurrentState())) {
+                    if (logger.isInfoEnabled()) {
+                        logger.info("Setting up a separate thread to start " + vm.getProviderVirtualMachineId() + "...");
+                    }
+                    final String id = vm.getProviderVirtualMachineId();
+
+                    Thread t = new Thread() {
+                        public void run() {
+                            try {
+                                VirtualMachine vm = null;
+
+                                for (int i = 0; i < 5; i++) {
+                                    try {
+                                        if (vm == null) {
+                                            try {
+                                                vm = getVirtualMachine(id);
+                                            } catch (Throwable ignore) {
+                                                // ignore
                                             }
-                                            return;
                                         }
+                                        if (vm != null) {
+                                            if (logger.isInfoEnabled()) {
+                                                logger.info("Verifying the state of " + id);
+                                            }
+                                            vm = waitForState(vm, CalendarWrapper.MINUTE * 15L, VmState.STOPPED, VmState.RUNNING);
+                                            if (vm == null || VmState.TERMINATED.equals(vm.getCurrentState()) || VmState.RUNNING.equals(vm.getCurrentState())) {
+                                                if (logger.isInfoEnabled()) {
+                                                    logger.info("Pre-emptive return due to non-existence or true running: " + id);
+                                                }
+                                                return;
+                                            }
+                                        }
+                                        if (logger.isInfoEnabled()) {
+                                            logger.info("Start attempt " + (i + 1) + " on " + id);
+                                        }
+                                        ServerSupport.this.start(id);
+                                        if (logger.isInfoEnabled()) {
+                                            logger.info("VM " + id + " started");
+                                        }
+                                        return;
+                                    } catch (Exception e) {
+                                        logger.warn("Failed to start virtual machine " + id + " post-create: " + e.getMessage());
                                     }
-                                    if( logger.isInfoEnabled() ) {
-                                        logger.info("Start attempt " + (i+1) + " on " + id);
+                                    try {
+                                        Thread.sleep(60000L);
+                                    } catch (InterruptedException ignore) {
                                     }
-                                    ServerSupport.this.start(id);
-                                    if( logger.isInfoEnabled() ) {
-                                        logger.info("VM " + id + " started");
+                                }
+                                if (logger.isInfoEnabled()) {
+                                    logger.info("VM " + id + " never started");
+                                    if (vm != null) {
+                                        logger.debug("status.vm." + id + " (not started)=" + vm.getCurrentState());
                                     }
-                                    return;
                                 }
-                                catch( Exception e ) {
-                                    logger.warn("Failed to start virtual machine " + id + " post-create: " + e.getMessage());
-                                }
-                                try { Thread.sleep(60000L); }
-                                catch( InterruptedException ignore ) { }
-                            }
-                            if( logger.isInfoEnabled() ) {
-                                logger.info("VM " + id + " never started");
-                                if( vm != null ) {
-                                    logger.debug("status.vm." + id + " (not started)=" + vm.getCurrentState());
-                                }
+                            } finally {
+                                provider.release();
                             }
                         }
-                        finally {
-                            provider.release();
-                        }
-                    }
-                };
+                    };
 
-                provider.hold();
-                t.setName("Start CloudSigma VM " + id);
-                t.setDaemon(true);
-                t.start();
+                    provider.hold();
+                    t.setName("Start CloudSigma VM " + id);
+                    t.setDaemon(true);
+                    t.start();
+                }
+                return vm;
             }
-            return vm;
-        }
-        finally {
-            if( logger.isTraceEnabled() ) {
+
+            catch (JSONException e) {
+                throw new InternalException(e);
+            }
+        } finally {
+            if (logger.isTraceEnabled()) {
                 logger.trace("EXIT - " + ServerSupport.class.getName() + ".launch()");
             }
         }
     }
 
-    @Override
-    public @Nonnull Iterable<String> listFirewalls(@Nonnull String vmId) throws InternalException, CloudException {
-        return Collections.emptyList();
-    }
-
     private transient ArrayList<VirtualMachineProduct> cachedProducts;
 
     @Override
-    public Iterable<VirtualMachineProduct> listProducts(Architecture architecture) throws InternalException, CloudException {
+    public @Nonnull Iterable<VirtualMachineProduct> listProducts(@Nonnull Architecture architecture) throws InternalException, CloudException {
         ArrayList<VirtualMachineProduct> products = cachedProducts;
 
-        if( products == null ) {
+        if (products == null) {
             products = new ArrayList<VirtualMachineProduct>();
 
-            for( int ram : new int[] { 512, 1024, 2048, 4096, 8192, 12288, 16384, 20480, 24576, 28668, 32768 } ) {
-                for( int cpu : new int[] { 1000, 1200, 1500, 2000, 2500, 3000, 4000, 5000, 6000, 7000, 8000, 9000, 10000, 12000, 14000, 16000, 18000, 20000} ) {
-                    for( int cpuCount : new int[] { 1, 2, 4, 8 } ) {
-                        if( cpuCount == 1 ) {
+            for (int ram : new int[]{512, 1024, 2048, 4096, 8192, 12288, 16384, 20480, 24576, 28668, 32768}) {
+                for (int cpu : new int[]{1000, 1200, 1500, 2000, 2500, 3000, 4000, 5000, 6000, 7000, 8000, 9000, 10000, 12000, 14000, 16000, 18000, 20000}) {
+                    for (int cpuCount : new int[]{1, 2, 4, 8}) {
+                        if (cpuCount == 1) {
                             products.add(getProduct(ram + ":" + cpu));
-                        }
-                        else {
+                        } else {
                             products.add(getProduct(ram + ":" + cpu + ":" + cpuCount));
                         }
                     }
@@ -635,7 +840,7 @@ public class ServerSupport extends AbstractVMSupport {
 
     @Override
     public Iterable<Architecture> listSupportedArchitectures() {
-        if( architectures == null ) {
+        if (architectures == null) {
             ArrayList<Architecture> list = new ArrayList<Architecture>();
 
             list.add(Architecture.I64);
@@ -648,18 +853,56 @@ public class ServerSupport extends AbstractVMSupport {
     @Override
     public @Nonnull Iterable<ResourceStatus> listVirtualMachineStatus() throws InternalException, CloudException {
         CloudSigmaMethod method = new CloudSigmaMethod(provider);
-
-        List<Map<String,String>> objects = method.list("/servers/info");
-
-        if( objects == null ) {
-            throw new CloudException("No servers endpoint found");
-        }
         ArrayList<ResourceStatus> list = new ArrayList<ResourceStatus>();
-        for( Map<String,String> object : objects ) {
-            ResourceStatus vm = toStatus(object);
 
-            if( vm != null ) {
-                list.add(vm);
+        boolean moreData = true;
+        String baseTarget = "/servers/detail/";
+        String target = "";
+
+        while(moreData)  {
+            //dmayne 20130218: JSON Parsing
+            logger.debug("Target "+target);
+            target = baseTarget+target;
+            logger.debug("final target "+target);
+
+            JSONObject jObject = method.list(target);
+
+            if (jObject == null) {
+                throw new CloudException("No servers endpoint found");
+            }
+
+            try {
+                JSONArray objects = jObject.getJSONArray("objects");
+                for (int i= 0; i < objects.length(); i++) {
+                    ResourceStatus vm = toStatus(objects.getJSONObject(i));
+
+                    if (vm != null) {
+                        list.add(vm);
+                    }
+                }
+
+                //dmayne 20130314: check if there are more pages
+                if (jObject.has("meta")) {
+                    logger.debug("Found meta tag");
+                    JSONObject meta = jObject.getJSONObject("meta");
+
+                    logger.debug("Number of objects "+list.size()+" out of "+meta.getString("total_count"));
+
+                    if (meta.has("next") && !(meta.isNull("next")) && !meta.getString("next").equals("")) {
+                        logger.debug("Found new page "+meta.getString("next"));
+                        target = meta.getString("next");
+                        logger.debug("target "+target);
+                        target = target.substring(target.indexOf("?"));
+                        logger.debug("new target "+target);
+                        moreData = true;
+                    }
+                    else  {
+                        moreData = false;
+                    }
+                }
+            }
+            catch (JSONException e) {
+                throw new InternalException(e);
             }
         }
         return list;
@@ -668,18 +911,56 @@ public class ServerSupport extends AbstractVMSupport {
     @Override
     public @Nonnull Iterable<VirtualMachine> listVirtualMachines() throws InternalException, CloudException {
         CloudSigmaMethod method = new CloudSigmaMethod(provider);
-
-        List<Map<String,String>> objects = method.list("/servers/info");
-
-        if( objects == null ) {
-            throw new CloudException("No servers endpoint found");
-        }
         ArrayList<VirtualMachine> list = new ArrayList<VirtualMachine>();
-        for( Map<String,String> object : objects ) {
-            VirtualMachine vm = toVirtualMachine(object);
 
-            if( vm != null ) {
-                list.add(vm);
+        boolean moreData = true;
+        String baseTarget = "/servers/detail/";
+        String target = "";
+
+        while(moreData)  {
+            //dmayne 20130218: JSON Parsing
+            logger.debug("Target "+target);
+            target = baseTarget+target;
+            logger.debug("final target "+target);
+
+            JSONObject jObject = method.list(target);
+
+            if (jObject == null) {
+                throw new CloudException("No servers endpoint found");
+            }
+
+            try {
+                JSONArray objects = jObject.getJSONArray("objects");
+                for (int i=0; i< objects.length(); i++) {
+                    VirtualMachine vm = toVirtualMachine(objects.getJSONObject(i));
+
+                    if (vm != null) {
+                        list.add(vm);
+                    }
+                }
+
+                //dmayne 20130314: check if there are more pages
+                if (jObject.has("meta")) {
+                    logger.debug("Found meta tag");
+                    JSONObject meta = jObject.getJSONObject("meta");
+
+                    logger.debug("Number of objects "+list.size()+" out of "+meta.getString("total_count"));
+
+                    if (meta.has("next") && !(meta.isNull("next")) && !meta.getString("next").equals("")) {
+                        logger.debug("Found new page "+meta.getString("next"));
+                        target = meta.getString("next");
+                        logger.debug("target "+target);
+                        target = target.substring(target.indexOf("?"));
+                        logger.debug("new target "+target);
+                        moreData = true;
+                    }
+                    else  {
+                        moreData = false;
+                    }
+                }
+            }
+            catch (JSONException e) {
+                throw new InternalException(e);
             }
         }
         return list;
@@ -694,24 +975,28 @@ public class ServerSupport extends AbstractVMSupport {
     public void reboot(@Nonnull String vmId) throws CloudException, InternalException {
         VirtualMachine vm = getVirtualMachine(vmId);
 
-        if( vm == null ) {
+        if (vm == null) {
             throw new CloudException("No such virtual machine: " + vmId);
         }
         stop(vmId);
 
         long timeout = System.currentTimeMillis() + (CalendarWrapper.MINUTE * 20L);
 
-        while( timeout > System.currentTimeMillis() ) {
-            try { vm = getVirtualMachine(vmId); }
-            catch( Exception ignore ) { }
-            if( vm == null || VmState.TERMINATED.equals(vm.getCurrentState()) ) {
+        while (timeout > System.currentTimeMillis()) {
+            try {
+                vm = getVirtualMachine(vmId);
+            } catch (Exception ignore) {
+            }
+            if (vm == null || VmState.TERMINATED.equals(vm.getCurrentState())) {
                 throw new CloudException("Server disappeared during reboot");
             }
-            if( VmState.STOPPED.equals(vm.getCurrentState()) ) {
+            if (VmState.STOPPED.equals(vm.getCurrentState())) {
                 break;
             }
-            try { Thread.sleep(15000L); }
-            catch( InterruptedException ignore ) { }
+            try {
+                Thread.sleep(15000L);
+            } catch (InterruptedException ignore) {
+            }
         }
         start(vmId);
     }
@@ -719,18 +1004,53 @@ public class ServerSupport extends AbstractVMSupport {
     public void releaseIP(@Nonnull IpAddress address) throws CloudException, InternalException {
         String serverId = address.getServerId();
 
-        if( serverId == null ) {
+        if (serverId == null) {
             throw new CloudException("No server is assigned to " + address.getProviderIpAddressId());
         }
-        VirtualMachine vm = getVirtualMachine(serverId);
+        VirtualMachine vm = null;
 
-        if( vm == null ) {
-            throw new CloudException("No such virtual machine: " + serverId);
+        CloudSigmaMethod method = new CloudSigmaMethod(provider);
+
+        //dmayne 20130218: use JSON Parsing
+        try {
+            String obj = method.getString(toServerURL(serverId, ""));
+            if (obj != null ) {
+                vm = toVirtualMachine(new JSONObject(obj));
+            }
+
+            if (vm == null) {
+                throw new CloudException("No such virtual machine: " + serverId);
+            }
+
+            //check if server needs to be stopped before making changes
+            if (!vm.getCurrentState().equals(VmState.STOPPED)) {
+                stop(vm.getProviderVirtualMachineId());
+                waitForState(vm, CalendarWrapper.MINUTE * 5L, VmState.STOPPED);
+                obj = method.getString(toServerURL(serverId, ""));
+            }
+
+            JSONObject json = new JSONObject(obj);
+            JSONArray nics = json.getJSONArray("nics");
+            JSONArray newArray = new JSONArray();
+            int index = 0;
+            for (int i = 0; i < nics.length(); i++) {
+                JSONObject nic = (JSONObject) nics.get(i);
+                if (address.getVersion().equals(IPVersion.IPV4)) {
+                    JSONObject nicObj = nic.getJSONObject("ip_v4_conf");
+                    JSONObject ip = nicObj.getJSONObject("ip");
+                    if (!ip.getString("uuid").equals(address.getProviderIpAddressId())) {
+                        newArray.put(nics.getJSONObject(i));
+                    }
+                }
+            }
+            json.put("nics", newArray);
+            String jsonBody = json.toString();
+
+            change(vm, jsonBody);
         }
-        StringBuilder body = new StringBuilder();
-
-        body.append("nic:0:dhcp \n");
-        change(vm, body.toString());
+        catch (JSONException e) {
+            throw new InternalException(e);
+        }
     }
 
     @Override
@@ -741,39 +1061,37 @@ public class ServerSupport extends AbstractVMSupport {
     @Override
     public void start(@Nonnull String vmId) throws InternalException, CloudException {
         CloudSigmaMethod method = new CloudSigmaMethod(provider);
+        logger.debug("Starting vm " + vmId);
 
-        method.getObject(toServerURL(vmId, "start"));
+        method.postString(toServerURL(vmId, "action/?do=start"), "");
     }
 
     @Override
     public void stop(@Nonnull String vmId, boolean force) throws InternalException, CloudException {
-        if( logger.isTraceEnabled() ) {
+        if (logger.isTraceEnabled()) {
             logger.trace("ENTER - " + ServerSupport.class.getName() + ".stop(" + vmId + "," + force + ")");
         }
         try {
             CloudSigmaMethod method = new CloudSigmaMethod(provider);
 
-            method.getObject(toServerURL(vmId, force ? "stop" : "shutdown"));
-
-            long timeout = System.currentTimeMillis() + (CalendarWrapper.MINUTE * 5L);
-
-            while( System.currentTimeMillis() > timeout ) {
-                try {
-                    VirtualMachine vm = getVirtualMachine(vmId);
-
-                    if( vm == null || VmState.TERMINATED.equals(vm.getCurrentState()) || VmState.STOPPED.equals(vm.getCurrentState()) ) {
-                        return;
-                    }
+            //dmayne 20130227: check that vm is started before trying to stop
+            try {
+                VirtualMachine before = getVirtualMachine(vmId);
+                if (before == null || VmState.TERMINATED.equals(before.getCurrentState()) || VmState.STOPPED.equals(before.getCurrentState()) || VmState.STOPPING.equals(before.getCurrentState())) {
+                    return;
                 }
-                catch( Throwable ignore ) {
-                    // ignore
-                }
-                try { Thread.sleep(15000L); }
-                catch( InterruptedException ignore ) { }
+                waitForState(before, (CalendarWrapper.MINUTE * 5L), VmState.RUNNING);
+            } catch (Throwable ignore) {
+                logger.error("Error while getting vm: " + vmId);
             }
-        }
-        finally {
-            if( logger.isTraceEnabled() ) {
+
+            if (force) {
+                method.postString(toServerURL(vmId, "action/?do=shutdown"), "");
+            } else {
+                method.postString(toServerURL(vmId, "action/?do=stop"), "");
+            }
+        } finally {
+            if (logger.isTraceEnabled()) {
                 logger.trace("EXIT - " + ServerSupport.class.getName() + ".stop()");
             }
         }
@@ -803,25 +1121,29 @@ public class ServerSupport extends AbstractVMSupport {
     public void terminate(@Nonnull String vmId) throws InternalException, CloudException {
         VirtualMachine vm = getVirtualMachine(vmId);
 
-        if( vm == null ) {
+        if (vm == null) {
             throw new CloudException("No such virtual machine: " + vmId);
         }
         CloudSigmaMethod method = new CloudSigmaMethod(provider);
 
-        method.getObject(toServerURL(vmId, "destroy"));
+        method.deleteString(toServerURL(vmId, ""), "");
 
-        long timeout = System.currentTimeMillis() + (CalendarWrapper.MINUTE*10L);
+        long timeout = System.currentTimeMillis() + (CalendarWrapper.MINUTE * 10L);
 
-        try { vm = getVirtualMachine(vmId); }
-        catch( Exception ignore ) { }
-        while( timeout > System.currentTimeMillis() ) {
-            if( vm == null || VmState.TERMINATED.equals(vm.getCurrentState()) ) {
+        try {
+            vm = getVirtualMachine(vmId);
+        } catch (Exception ignore) {
+        }
+        while (timeout > System.currentTimeMillis()) {
+            if (vm == null || VmState.TERMINATED.equals(vm.getCurrentState())) {
                 return;
             }
-            try { Thread.sleep(15000L); }
-            catch( InterruptedException ignore ) { }
+            try {
+                Thread.sleep(15000L);
+            } catch (InterruptedException ignore) {
+            }
         }
-        logger.warn("System timed out waiting ro the VM termination to complete");
+        logger.warn("System timed out waiting for the VM termination to complete");
     }
 
     @Override
@@ -836,17 +1158,17 @@ public class ServerSupport extends AbstractVMSupport {
 
     @Override
     public void updateTags(@Nonnull String[] vmIds, @Nonnull Tag... tags) throws CloudException, InternalException {
-        // NO-OP
+        //To change body of implemented methods use File | Settings | File Templates.
     }
 
     @Override
     public void removeTags(@Nonnull String vmId, @Nonnull Tag... tags) throws CloudException, InternalException {
-        // NO-OP
+        //To change body of implemented methods use File | Settings | File Templates.
     }
 
     @Override
     public void removeTags(@Nonnull String[] vmIds, @Nonnull Tag... tags) throws CloudException, InternalException {
-        // NO-OP
+        //To change body of implemented methods use File | Settings | File Templates.
     }
 
     @Override
@@ -855,29 +1177,28 @@ public class ServerSupport extends AbstractVMSupport {
     }
 
     private boolean isPublic(@Nonnull String ip) {
-        if( ip.startsWith("127.0.0.") ) {
+        if (ip.startsWith("127.0.0.")) {
             return false;
         }
-        if( ip.startsWith("10.") ) {
+        if (ip.startsWith("10.")) {
             return false;
         }
-        if( ip.startsWith("192.168.")) {
+        if (ip.startsWith("192.168.")) {
             return false;
         }
-        if( ip.startsWith("172.") ) {
+        if (ip.startsWith("172.")) {
             String[] parts = ip.split("\\.");
 
-            if( parts.length != 4 ) {
+            if (parts.length != 4) {
                 return true;
             }
             try {
                 int x = Integer.parseInt(parts[1]);
 
-                if( x >= 16 && x <33 ) {
+                if (x >= 16 && x < 33) {
                     return false;
                 }
-            }
-            catch( NumberFormatException ignore ) {
+            } catch (NumberFormatException ignore) {
                 // ignore
             }
         }
@@ -885,86 +1206,81 @@ public class ServerSupport extends AbstractVMSupport {
     }
 
     private void setIP(@Nonnull VirtualMachine vm, @Nonnull TreeSet<String> ips) {
-        ArrayList<RawAddress> pub = new ArrayList<RawAddress>();
-        ArrayList<RawAddress> priv = new ArrayList<RawAddress>();
+        ArrayList<String> pub = new ArrayList<String>();
+        ArrayList<String> priv = new ArrayList<String>();
 
-        for( String ip : ips ) {
-            if( isPublic(ip) ) {
-                pub.add(new RawAddress(ip));
-            }
-            else {
-                priv.add(new RawAddress(ip));
+        for (String ip : ips) {
+            if (isPublic(ip)) {
+                pub.add(ip);
+            } else {
+                priv.add(ip);
             }
         }
-        vm.setPrivateAddresses(priv.toArray(new RawAddress[priv.size()]));
-        vm.setPublicAddresses(pub.toArray(new RawAddress[pub.size()]));
+        vm.setPrivateIpAddresses(priv.toArray(new String[priv.size()]));
+        vm.setPublicIpAddresses(pub.toArray(new String[pub.size()]));
     }
 
 
-    private @Nullable ResourceStatus toStatus(@Nullable Map<String,String> object) throws CloudException {
-        if( object == null ) {
+    private @Nullable ResourceStatus toStatus(@Nullable JSONObject object) throws CloudException, InternalException {
+        if (object == null) {
             return null;
         }
         ProviderContext ctx = provider.getContext();
 
-        if( ctx == null ) {
+        if (ctx == null) {
             throw new NoContextException();
         }
         String regionId = ctx.getRegionId();
 
-        if( regionId == null ) {
+        if (regionId == null) {
             throw new CloudSigmaConfigurationException("No region was specified for this request");
         }
-        String id = null;
 
-        if( object.containsKey("server") ) {
-            id = object.get("server");
-        }
-        if( id == null || id.equals("") ) {
+        try {
+        String id = object.getString("uuid");
+        if (id == null || id.equals("")) {
             return null;
         }
+
         VmState state = VmState.PENDING;
 
-        if( object.containsKey("status") ) {
-            String status = object.get("status");
-
-
-            if( status != null ) {
-                if( status.equalsIgnoreCase("stopped") ) {
-                    state = VmState.STOPPED;
-                }
-                else if( status.equalsIgnoreCase("active") ) {
-                    state = VmState.RUNNING;
-                }
-                else if( status.equalsIgnoreCase("paused") ) {
-                    state = VmState.PAUSED;
-                }
-                else if( status.equalsIgnoreCase("dead") || status.equalsIgnoreCase("dumped") ) {
-                    state = VmState.TERMINATED;
-                }
-                else if( status.startsWith("imaging") ) {
-                    state = VmState.PENDING;
-                }
-                else {
-                    logger.warn("DEBUG: Unknown CloudSigma server status: " + status);
-                }
+        String status = object.getString("status");
+        if (status != null) {
+            if (status.equalsIgnoreCase("stopped")) {
+                state = VmState.STOPPED;
+            } else if (status.equalsIgnoreCase("stopping")) {
+                state = VmState.STOPPING;
+            } else if (status.equalsIgnoreCase("started") || status.equalsIgnoreCase("running")) {
+                state = VmState.RUNNING;
+            } else if (status.equalsIgnoreCase("paused")) {
+                state = VmState.PAUSED;
+            } else if (status.equalsIgnoreCase("dead") || status.equalsIgnoreCase("dumped") || status.equalsIgnoreCase("unavailable")) {
+                state = VmState.TERMINATED;
+            } else if (status.startsWith("imaging")) {
+                state = VmState.PENDING;
+            } else {
+                logger.warn("DEBUG: Unknown CloudSigma server status: " + status);
             }
         }
         return new ResourceStatus(id, state);
+        }
+        catch (JSONException e) {
+            throw new InternalException(e);
+        }
     }
 
-    private @Nullable VirtualMachine toVirtualMachine(@Nullable Map<String,String> object) throws CloudException {
-        if( object == null ) {
+    private @Nullable VirtualMachine toVirtualMachine(@Nullable JSONObject object) throws CloudException, InternalException {
+        if (object == null) {
             return null;
         }
         ProviderContext ctx = provider.getContext();
 
-        if( ctx == null ) {
+        if (ctx == null) {
             throw new NoContextException();
         }
         String regionId = ctx.getRegionId();
 
-        if( regionId == null ) {
+        if (regionId == null) {
             throw new CloudSigmaConfigurationException("No region was specified for this request");
         }
         VirtualMachine vm = new VirtualMachine();
@@ -978,185 +1294,243 @@ public class ServerSupport extends AbstractVMSupport {
         vm.setProviderDataCenterId(regionId + "-a");
         vm.setProviderRegionId(regionId);
         vm.setArchitecture(Architecture.I64);
-        if( object.containsKey("server") ) {
-            String id = object.get("server");
+        try {
+            String id = object.getString("uuid");
 
             vm.setProviderVirtualMachineId(id);
-        }
-        String boot = object.get("boot");
-
-        if( boot == null || boot.trim().equals("") ) {
-            boot = "ide:0:0";
-        }
-        String imageId = object.get(boot);
-
-        if( imageId != null && !imageId.equals("") ) {
-            vm.setProviderMachineImageId(imageId);
-        }
-        String vlanId = object.get("nic:0:vlan");
-
-        if( vlanId == null || vlanId.trim().equals("") ) {
-            vlanId = object.get("nic:1:vlan");
-            if( vlanId == null || vlanId.trim().equals("") ) {
-                vlanId = null;
+            //dmayne 20130218: use JSON Parsing
+            String imageId = "";
+            JSONArray drives = null;
+            if (object.has("drives")) {
+                drives = object.getJSONArray("drives");
+                for (int i = 0 ; i<drives.length(); i++) {
+                    JSONObject jdrive = drives.getJSONObject(i);
+                    if (jdrive.has("boot_order")) {
+                        String boot_order = jdrive.getString("boot_order");
+                        if (boot_order.equals("1")) {
+                            JSONObject driveTag = jdrive.getJSONObject("drive");
+                            imageId = driveTag.getString("uuid");
+                            break;
+                        }
+                    }
+                }
             }
-        }
-        if( vlanId != null ) {
-            vm.setProviderVlanId(vlanId);
-        }
-        for( int i=0; i<8; i++ ) {
-            String key = "block:" + i;
-            String value = object.get(key);
-
-            if( value != null ) {
-                vm.setTag(key, value);
+            if (imageId != null && !imageId.equals("")) {
+                vm.setProviderMachineImageId(imageId);
             }
-        }
-        TreeSet<String> allIps = new TreeSet<String>();
-        String ip = object.get("nic:0:dhcp");
 
-        if( ip != null && !ip.equals("") && !ip.equals("auto") ) {
-            vm.setProviderAssignedIpAddressId(ip);
-            allIps.add(ip);
-        }
-        ip = object.get("vnc:ip");
-        if( ip != null && !ip.equals("") && !ip.equals("auto") ) {
-            allIps.add(ip);
-        }
-        for( int i=1; i<10; i++ ) {
-            ip = object.get("nic:" + i + ":dhcp");
-            if( ip == null ) {
-                break;
+            String vlanId = null;
+            JSONArray nics = null;
+            if (object.has("nics")) {
+                nics = object.getJSONArray("nics");
+                for (int i = 0; i < nics.length(); i++) {
+                    JSONObject jnic = nics.getJSONObject(i);
+                    if (jnic.has("vlan") && !jnic.isNull("vlan")) {
+                        JSONObject vlan = jnic.getJSONObject("vlan");
+                        if (vlan != null) {
+                            vlanId = vlan.getString("uuid");
+                            break;
+                        }
+                    }
+                }
             }
-            if( ip != null && !ip.equals("") && !ip.equals("auto") ) {
-                allIps.add(ip);
+            if (vlanId != null) {
+                vm.setProviderVlanId(vlanId);
             }
-        }
-        if( !allIps.isEmpty() ) {
-            setIP(vm, allIps);
-        }
-        if( object.containsKey("user") ) {
-            String user = object.get("user");
 
+            if (drives != null) {
+                for (int i = 0; i< drives.length(); i++) {
+                    JSONObject jDrive = drives.getJSONObject(i);
+                    String devChannel = jDrive.getString("dev_channel");
+                    JSONObject driveTag = jDrive.getJSONObject("drive");
+                    String value = driveTag.getString("uuid");
+                    if (value != null) {
+                        String key = "virtio" + ":" + devChannel;
+                        vm.setTag(key, value);
+                    }
+                }
+            }
+
+            TreeSet<String> allIps = new TreeSet<String>();
+            if (nics != null) {
+                for (int i=0; i < nics.length(); i++) {
+                    //todo:dmayne 20130218: will a server ever have both ipv4 and ipv6?
+                    JSONObject jnic = nics.getJSONObject(i);
+
+                    if (jnic.has("ip_v4_conf") && !jnic.isNull("ip_v4_conf")) {
+                        JSONObject ipv4 = jnic.getJSONObject("ip_v4_conf");
+                        if (ipv4 != null) {
+                            String ip4 = null;
+                            if (ipv4.has("ip") && !ipv4.isNull("ip")) {
+                                JSONObject ipObj = ipv4.getJSONObject("ip");
+                                if (ipObj != null) {
+                                    ip4 = ipObj.getString("uuid");
+                                }
+                            }
+                            if (ipv4.has("conf")) {
+                                String conf4 = ipv4.getString("conf");
+                                if (conf4.equalsIgnoreCase("static")) {
+                                    if (ip4 != null && !ip4.equals("") && !ip4.equals("auto")) {
+                                        if (vm.getProviderAssignedIpAddressId() == null) {
+                                            vm.setProviderAssignedIpAddressId(ip4);
+                                        }
+                                        allIps.add(ip4);
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+
+                    if (jnic.has("ip_v6_conf") && !jnic.isNull("ip_v6_conf")) {
+                        JSONObject ipv6 = jnic.getJSONObject("ip_v6_conf");
+                        if (ipv6 != null) {
+                            String ip6 = null;
+                            if (ipv6.has("ip") && !ipv6.isNull("ip")) {
+                                JSONObject ip6Obj = ipv6.getJSONObject("ip");
+                                if (ip6Obj != null) {
+                                    ip6 = ip6Obj.getString("uuid");
+                                }
+                            }
+                            if (ipv6.has("conf")) {
+                                String conf6 = ipv6.getString("conf");
+                                if (conf6.equalsIgnoreCase("static")) {
+                                    if (ip6 != null && !ip6.equals("") && !ip6.equals("auto")) {
+                                        if (vm.getProviderAssignedIpAddressId() == null) {
+                                            vm.setProviderAssignedIpAddressId(ip6);
+                                        }
+                                        allIps.add(ip6);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            if (!allIps.isEmpty()) {
+                setIP(vm, allIps);
+            }
+            JSONObject owner = object.getJSONObject("owner");
+            String user = owner.getString("uuid");
             vm.setProviderOwnerId(user);
-        }
-        if( object.containsKey("name") ) {
-            String value = object.get("name");
 
+            String value = object.getString("name");
             vm.setName(value);
-        }
-        if( object.containsKey("vnc:password") ) {
-            String value = object.get("vnc:password");
 
+            JSONObject meta = object.getJSONObject("meta");
+            if (meta != null && meta.has("description")) {
+                String description = meta.getString("description");
+                if (description != null && !description.equals("")) {
+                    vm.setDescription(description);
+                }
+            }
+
+            value = object.getString("vnc_password");
             vm.setRootUser("root");
             vm.setRootPassword(value);
-        }
-        if( object.containsKey("status") ) {
-            String status = object.get("status");
 
-
-            if( status != null ) {
-                if( status.equalsIgnoreCase("stopped") ) {
+            String status = object.getString("status");
+            if (status != null) {
+                if (status.equalsIgnoreCase("stopped")) {
                     vm.setCurrentState(VmState.STOPPED);
-                }
-                else if( status.equalsIgnoreCase("active") ) {
+                } else if (status.equalsIgnoreCase("stopping")) {
+                    vm.setCurrentState(VmState.STOPPING);
+                } else if (status.equalsIgnoreCase("started") || status.equalsIgnoreCase("running")) {
                     vm.setCurrentState(VmState.RUNNING);
-                }
-                else if( status.equalsIgnoreCase("paused") ) {
+                } else if (status.equalsIgnoreCase("paused")) {
                     vm.setCurrentState(VmState.PAUSED);
-                }
-                else if( status.equalsIgnoreCase("dead") || status.equalsIgnoreCase("dumped") ) {
+                } else if (status.equalsIgnoreCase("dead") || status.equalsIgnoreCase("dumped") || status.equalsIgnoreCase("unavailable")) {
                     vm.setCurrentState(VmState.TERMINATED);
-                }
-                else if( status.startsWith("imaging") ) {
+                } else if (status.startsWith("imaging")) {
                     vm.setCurrentState(VmState.PENDING);
-                }
-                else {
+                } else {
                     logger.warn("DEBUG: Unknown CloudSigma server status: " + status);
                 }
-            }
-            else {
+            } else {
                 vm.setCurrentState(VmState.PENDING);
             }
-        }
-        String cpuCount = "1", cpuSpeed = "1000", ram = "512";
 
-        try {
-            String tmp = object.get("cpu");
+            String cpuCount = "1", cpuSpeed = "1000", ramInMB = "512", ramInBytes = "0";
 
-            if( tmp != null ) {
-                cpuSpeed = String.valueOf(Integer.parseInt(tmp));
+            try {
+                String tmp = object.getString("smp");
+                if (tmp != null) {
+                    cpuCount = String.valueOf(Integer.parseInt(tmp));
+                }
+            } catch (NumberFormatException ignore) {
+                // ignore
             }
-        }
-        catch( NumberFormatException ignore ) {
-            // ignore
-        }
-        try {
-            String tmp = object.get("smp");
-
-            if( tmp != null ) {
-                cpuCount = String.valueOf(Integer.parseInt(tmp));
+            try {
+                String tmp = object.getString("cpu");
+                if (tmp != null) {
+                    cpuSpeed = String.valueOf(Integer.parseInt(tmp));
+                }
+                // we will be given total cpu speed but we need cpuPerSMP
+                cpuSpeed = String.valueOf(Integer.parseInt(cpuSpeed)/Integer.parseInt(cpuCount));
+            } catch (NumberFormatException ignore) {
+                // ignore
             }
-        }
-        catch( NumberFormatException ignore ) {
-            // ignore
-        }
-        try {
-            String tmp = object.get("mem");
-
-            if( tmp != null ) {
-                ram = String.valueOf(Integer.parseInt(tmp));
+            try {
+                String tmp = object.getString("mem");
+                if (tmp != null) {
+                    ramInBytes = String.valueOf(Long.parseLong(tmp));
+                    ramInMB = String.valueOf(Long.parseLong(ramInBytes)/1024/1024);
+                }
+            } catch (NumberFormatException ignore) {
+                // ignore
             }
+            if (cpuCount.equals("1")) {
+                vm.setProductId(ramInMB + ":" + cpuSpeed);
+            } else {
+                vm.setProductId(ramInMB + ":" + cpuSpeed + ":" + cpuCount);
+            }
+            if (vm.getProviderVirtualMachineId() == null) {
+                return null;
+            }
+            if (vm.getName() == null) {
+                vm.setName(vm.getProviderVirtualMachineId());
+            }
+            if (vm.getDescription() == null) {
+                vm.setDescription(vm.getName());
+            }
+            vm.setClonable(VmState.PAUSED.equals(vm.getCurrentState()));
+            return vm;
         }
-        catch( NumberFormatException ignore ) {
-            // ignore
+        catch (JSONException e) {
+            throw new InternalException(e);
         }
-        if( cpuCount.equals("1") ) {
-            vm.setProductId(ram + ":" + cpuSpeed);
-        }
-        else {
-            vm.setProductId(ram + ":" + cpuSpeed + ":" + cpuCount);
-        }
-        if( vm.getProviderVirtualMachineId() == null ) {
-            return null;
-        }
-        if( vm.getName() == null ) {
-            vm.setName(vm.getProviderVirtualMachineId());
-        }
-        if( vm.getDescription() == null ) {
-            vm.setDescription(vm.getName());
-        }
-        vm.setClonable(VmState.PAUSED.equals(vm.getCurrentState()));
-        return vm;
     }
 
     private @Nonnull String toServerURL(@Nonnull String vmId, @Nonnull String action) throws InternalException {
         try {
             return ("/servers/" + URLEncoder.encode(vmId, "utf-8") + "/" + action);
-        }
-        catch( UnsupportedEncodingException e ) {
+        } catch (UnsupportedEncodingException e) {
             logger.error("UTF-8 not supported: " + e.getMessage());
             throw new InternalException(e);
         }
     }
 
-    private @Nullable VirtualMachine waitForState(@Nonnull VirtualMachine vm, long timeoutPeriod, @Nonnull VmState ... states) {
+    private @Nullable VirtualMachine waitForState(@Nonnull VirtualMachine vm, long timeoutPeriod, @Nonnull VmState... states) {
         long timeout = System.currentTimeMillis() + timeoutPeriod;
         VirtualMachine newVm = vm;
 
-        while( timeout > System.currentTimeMillis() ) {
-            if( newVm == null ) {
+        while (timeout > System.currentTimeMillis()) {
+            if (newVm == null) {
                 return null;
             }
-            for( VmState state : states ) {
-                if( state.equals(newVm.getCurrentState()) ) {
+            for (VmState state : states) {
+                if (state.equals(newVm.getCurrentState())) {
                     return newVm;
                 }
             }
-            try { Thread.sleep(15000L); }
-            catch( InterruptedException ignore ) { }
-            try { newVm = getVirtualMachine(vm.getProviderVirtualMachineId()); }
-            catch( Exception ignore ) { }
+            try {
+                Thread.sleep(15000L);
+            } catch (InterruptedException ignore) {
+            }
+            try {
+                newVm = getVirtualMachine(vm.getProviderVirtualMachineId());
+            } catch (Exception ignore) {
+            }
         }
         return newVm;
     }

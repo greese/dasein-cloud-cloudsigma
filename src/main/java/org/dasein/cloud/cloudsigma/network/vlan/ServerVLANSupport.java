@@ -1,21 +1,28 @@
 /**
- * ========= CONFIDENTIAL =========
- *
- * Copyright (C) 2012 enStratus Networks Inc - ALL RIGHTS RESERVED
+ * Copyright (C) 2012-2013 Dell, Inc.
+ * See annotations for authorship information
  *
  * ====================================================================
- *  NOTICE: All information contained herein is, and remains the
- *  property of enStratus Networks Inc. The intellectual and technical
- *  concepts contained herein are proprietary to enStratus Networks Inc
- *  and may be covered by U.S. and Foreign Patents, patents in process,
- *  and are protected by trade secret or copyright law. Dissemination
- *  of this information or reproduction of this material is strictly
- *  forbidden unless prior written permission is obtained from
- *  enStratus Networks Inc.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  * ====================================================================
  */
+
 package org.dasein.cloud.cloudsigma.network.vlan;
 
+import org.dasein.cloud.network.AbstractVLANSupport;
+import org.json.JSONArray;
+import org.json.JSONException;
+import org.json.JSONObject;
 import org.apache.log4j.Logger;
 import org.dasein.cloud.CloudException;
 import org.dasein.cloud.InternalException;
@@ -27,10 +34,10 @@ import org.dasein.cloud.cloudsigma.CloudSigma;
 import org.dasein.cloud.cloudsigma.CloudSigmaConfigurationException;
 import org.dasein.cloud.cloudsigma.CloudSigmaMethod;
 import org.dasein.cloud.cloudsigma.NoContextException;
+import org.dasein.cloud.compute.ComputeServices;
 import org.dasein.cloud.compute.VirtualMachine;
 import org.dasein.cloud.compute.VirtualMachineSupport;
 import org.dasein.cloud.identity.ServiceAction;
-import org.dasein.cloud.network.AbstractVLANSupport;
 import org.dasein.cloud.network.IPVersion;
 import org.dasein.cloud.network.IpAddress;
 import org.dasein.cloud.network.IpAddressSupport;
@@ -40,7 +47,6 @@ import org.dasein.cloud.network.NetworkServices;
 import org.dasein.cloud.network.Networkable;
 import org.dasein.cloud.network.RoutingTable;
 import org.dasein.cloud.network.Subnet;
-import org.dasein.cloud.network.SubnetCreateOptions;
 import org.dasein.cloud.network.VLAN;
 import org.dasein.cloud.network.VLANState;
 
@@ -48,18 +54,15 @@ import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import java.io.UnsupportedEncodingException;
 import java.net.URLEncoder;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.Locale;
-import java.util.Map;
+import java.util.*;
 
 /**
  * Support for VLANs in CloudSigma.
- * <p>Created by George Reese: 10/26/12 12:30 PM</p>
+ * <p>Created by Danielle Mayne: 02/20/13 14:30 PM</p>
  * @author George Reese
- * @version 2012.09 initial version
- * @since 2012.09
+ * @author Danielle Mayne
+ * @version 2013.02 initial version
+ * @since 2013.02
  */
 public class ServerVLANSupport extends AbstractVLANSupport {
     static private final Logger logger = CloudSigma.getLogger(ServerVLANSupport.class);
@@ -98,11 +101,22 @@ public class ServerVLANSupport extends AbstractVLANSupport {
 
     @Override
     public boolean allowsNewVlanCreation() throws CloudException, InternalException {
-        return true;
+        //dmayne 20130221: New VLANs are created by buying a subscription.
+        return false;
     }
 
     @Override
     public boolean allowsNewSubnetCreation() throws CloudException, InternalException {
+        return false;
+    }
+
+    @Override
+    public boolean allowsMultipleTrafficTypesOverSubnet() throws CloudException, InternalException {
+        return false;
+    }
+
+    @Override
+    public boolean allowsMultipleTrafficTypesOverVlan() throws CloudException, InternalException {
         return false;
     }
 
@@ -134,27 +148,6 @@ public class ServerVLANSupport extends AbstractVLANSupport {
     @Override
     public @Nonnull NetworkInterface createNetworkInterface(@Nonnull NICCreateOptions options) throws CloudException, InternalException {
         throw new OperationNotSupportedException("NICs are not supported");
-    }
-
-    @Override
-    public @Nonnull Subnet createSubnet(@Nonnull SubnetCreateOptions options) throws CloudException, InternalException {
-        throw new OperationNotSupportedException("Subnets are not supported");
-    }
-
-    @Override
-    public @Nonnull VLAN createVlan(@Nonnull String cidr, @Nonnull String name, @Nonnull String description, @Nonnull String domainName, @Nonnull String[] dnsServers, @Nonnull String[] ntpServers) throws CloudException, InternalException {
-        StringBuilder body = new StringBuilder();
-
-        body.append("name ").append(name.replaceAll("\n", " ")).append("\n");
-
-        CloudSigmaMethod method = new CloudSigmaMethod(provider);
-
-        VLAN vlan = toVLAN(method.postObject("/resources/vlan/create", body.toString()));
-
-        if( vlan == null ) {
-            throw new CloudException("VLAN creation succeeded without an error, but no matching VLAN was returned");
-        }
-        return vlan;
     }
 
     @Override
@@ -219,9 +212,28 @@ public class ServerVLANSupport extends AbstractVLANSupport {
 
     @Override
     public VLAN getVlan(@Nonnull String vlanId) throws CloudException, InternalException {
-        CloudSigmaMethod method = new CloudSigmaMethod(provider);
+        if (vlanId.length() > 0){
+            CloudSigmaMethod method = new CloudSigmaMethod(provider);
 
-        return toVLAN(method.getObject(toNetworkURL(vlanId, "info")));
+            try {
+                String obj = method.getString(toNetworkURL(vlanId, ""));
+                if (obj != null ) {
+                    return toVLAN(new JSONObject(obj));
+                }
+                return null;
+            }
+            catch (JSONException e) {
+                throw new InternalException(e);
+            }
+        }
+        else {
+            throw new InternalException("Vlan id is null/empty!");
+        }
+    }
+
+    @Override
+    public boolean isConnectedViaInternetGateway(@Nonnull String vlanId) throws CloudException, InternalException {
+        return true;
     }
 
     @Override
@@ -282,23 +294,24 @@ public class ServerVLANSupport extends AbstractVLANSupport {
 
         IpAddressSupport ipSupport = network.getIpAddressSupport();
 
-        if( ipSupport != null ) {
-            for( IPVersion version : ipSupport.listSupportedIPVersions() ) {
-                for( IpAddress addr : ipSupport.listIpPool(version, false) ) {
-                    if( inVlanId.equals(addr.getProviderVlanId()) ) {
+        if (ipSupport != null) {
+            for (IPVersion version : ipSupport.listSupportedIPVersions()) {
+                for (IpAddress addr : ipSupport.listIpPool(version, false)) {
+                    if (inVlanId.equals(addr.getProviderVlanId())) {
                         resources.add(addr);
                     }
                 }
             }
         }
-        for( RoutingTable table : listRoutingTables(inVlanId) ) {
+        for (RoutingTable table : listRoutingTables(inVlanId)) {
             resources.add(table);
         }
+        ComputeServices compute = provider.getComputeServices();
         VirtualMachineSupport vmSupport = provider.getComputeServices().getVirtualMachineSupport();
         Iterable<VirtualMachine> vms = vmSupport.listVirtualMachines();
 
-        for( VirtualMachine vm : vms ) {
-            if( inVlanId.equals(vm.getProviderVlanId()) ) {
+        for (VirtualMachine vm : vms) {
+            if (inVlanId.equals(vm.getProviderVlanId())) {
                 resources.add(vm);
             }
         }
@@ -325,16 +338,55 @@ public class ServerVLANSupport extends AbstractVLANSupport {
         ArrayList<ResourceStatus> networks = new ArrayList<ResourceStatus>();
         CloudSigmaMethod method = new CloudSigmaMethod(provider);
 
-        Collection<Map<String,String>> list = method.list("/resources/vlan/info");
+        boolean moreData = true;
+        String baseTarget = "/vlans/detail/";
+        String target = "";
 
-        if( list == null ) {
-            throw new CloudException("No VLAN endpoint was found");
-        }
-        for( Map<String,String> object : list ) {
-            ResourceStatus status = toStatus(object);
+        while(moreData)  {
+            //dmayne 20130218: JSON Parsing
+            logger.debug("Target "+target);
+            target = baseTarget+target;
+            logger.debug("final target "+target);
 
-            if( status != null ) {
-                networks.add(status);
+            try {
+                JSONObject json = method.list(target);
+
+                if (json == null) {
+                    throw new CloudException("No VLAN endpoint was found");
+                }
+                JSONArray objects = json.getJSONArray("objects");
+                for (int i = 0; i < objects.length(); i++) {
+                    JSONObject jObj = objects.getJSONObject(i);
+
+                    ResourceStatus status = toStatus(jObj);
+
+                    if (status != null) {
+                        networks.add(status);
+                    }
+                }
+
+                //dmayne 20130314: check if there are more pages
+                if (json.has("meta")) {
+                    logger.debug("Found meta tag");
+                    JSONObject meta = json.getJSONObject("meta");
+
+                    logger.debug("Number of objects "+networks.size()+" out of "+meta.getString("total_count"));
+
+                    if (meta.has("next") && !(meta.isNull("next")) && !meta.getString("next").equals("")) {
+                        logger.debug("Found new page "+meta.getString("next"));
+                        target = meta.getString("next");
+                        logger.debug("target "+target);
+                        target = target.substring(target.indexOf("?"));
+                        logger.debug("new target "+target);
+                        moreData = true;
+                    }
+                    else  {
+                        moreData = false;
+                    }
+                }
+            }
+            catch (JSONException e) {
+                throw new InternalException(e);
             }
         }
         return networks;
@@ -345,16 +397,55 @@ public class ServerVLANSupport extends AbstractVLANSupport {
         ArrayList<VLAN> networks = new ArrayList<VLAN>();
         CloudSigmaMethod method = new CloudSigmaMethod(provider);
 
-        Collection<Map<String,String>> list = method.list("/resources/vlan/info");
+        boolean moreData = true;
+        String baseTarget = "/vlans/detail/";
+        String target = "";
 
-        if( list == null ) {
-            throw new CloudException("No VLAN endpoint was found");
-        }
-        for( Map<String,String> object : list ) {
-            VLAN vlan = toVLAN(object);
+        while(moreData)  {
+            //dmayne 20130218: JSON Parsing
+            logger.debug("Target "+target);
+            target = baseTarget+target;
+            logger.debug("final target "+target);
 
-            if( vlan != null ) {
-                networks.add(vlan);
+            try {
+                JSONObject json = method.list(target);
+
+                if (json == null) {
+                    throw new CloudException("No VLAN endpoint was found");
+                }
+                JSONArray objects = json.getJSONArray("objects");
+                for (int i = 0; i < objects.length(); i++) {
+                    JSONObject jObj = objects.getJSONObject(i);
+
+                    VLAN vlan = toVLAN(jObj);
+
+                    if (vlan != null) {
+                        networks.add(vlan);
+                    }
+                }
+
+                //dmayne 20130314: check if there are more pages
+                if (json.has("meta")) {
+                    logger.debug("Found meta tag");
+                    JSONObject meta = json.getJSONObject("meta");
+
+                    logger.debug("Number of objects "+networks.size()+" out of "+meta.getString("total_count"));
+
+                    if (meta.has("next") && !(meta.isNull("next")) && !meta.getString("next").equals("")) {
+                        logger.debug("Found new page "+meta.getString("next"));
+                        target = meta.getString("next");
+                        logger.debug("target "+target);
+                        target = target.substring(target.indexOf("?"));
+                        logger.debug("new target "+target);
+                        moreData = true;
+                    }
+                    else  {
+                        moreData = false;
+                    }
+                }
+            }
+            catch (JSONException e) {
+                throw new InternalException(e);
             }
         }
         return networks;
@@ -387,11 +478,8 @@ public class ServerVLANSupport extends AbstractVLANSupport {
 
     @Override
     public void removeVlan(String vlanId) throws CloudException, InternalException {
-        CloudSigmaMethod method = new CloudSigmaMethod(provider);
-
-        if( method.postString(toNetworkURL(vlanId, "destroy"), "") == null ) {
-            throw new CloudException("No VLAN endpoint for destroy operation");
-        }
+        //dmayne 20130222: api 2.0 does not support deleting vlan
+        throw new OperationNotSupportedException("Vlan deletion handled through subscriptions");
     }
 
     @Override
@@ -409,40 +497,44 @@ public class ServerVLANSupport extends AbstractVLANSupport {
         return new String[0];
     }
 
-    private @Nullable ResourceStatus toStatus(@Nullable Map<String,String> object) throws CloudException, InternalException {
-        if( object == null ) {
+    private @Nullable ResourceStatus toStatus(@Nullable JSONObject object) throws CloudException, InternalException {
+        if (object == null) {
             return null;
         }
         ProviderContext ctx = provider.getContext();
 
-        if( ctx == null ) {
+        if (ctx == null) {
             throw new NoContextException();
         }
         String regionId = ctx.getRegionId();
 
-        if( regionId == null ) {
+        if (regionId == null) {
             throw new CloudSigmaConfigurationException("No region was specified for this request");
         }
-        String id = object.get("resource");
-
-        if( id == null || id.equals("") ) {
-            return null;
+        try {
+            String id = object.getString("uuid");
+            if (id == null || id.equals("")) {
+                return null;
+            }
+            return new ResourceStatus(id, VLANState.AVAILABLE);
         }
-        return new ResourceStatus(id, VLANState.AVAILABLE);
+        catch (JSONException e) {
+            throw new InternalException(e);
+        }
     }
 
-    private @Nullable VLAN toVLAN(@Nullable Map<String,String> object) throws CloudException, InternalException {
-        if( object == null ) {
+    private @Nullable VLAN toVLAN(@Nullable JSONObject object) throws CloudException, InternalException {
+        if (object == null) {
             return null;
         }
         ProviderContext ctx = provider.getContext();
 
-        if( ctx == null ) {
+        if (ctx == null) {
             throw new NoContextException();
         }
         String regionId = ctx.getRegionId();
 
-        if( regionId == null ) {
+        if (regionId == null) {
             throw new CloudSigmaConfigurationException("No region was specified for this request");
         }
 
@@ -457,44 +549,56 @@ public class ServerVLANSupport extends AbstractVLANSupport {
         vlan.setCidr("0.0.0.0/0");
         vlan.setCurrentState(VLANState.AVAILABLE);
 
-        String id = object.get("resource");
+        try {String id = object.getString("uuid");
 
-        if( id != null && !id.equals("") ) {
+        if (id != null && !id.equals("")) {
             vlan.setProviderVlanId(id);
         }
-        String name = object.get("name");
 
-        if( name != null && !name.equals("") ) {
-            vlan.setName(name);
+        if (object.has("owner")) {
+            JSONObject owner = object.getJSONObject("owner");
+            String user = null;
+            if (owner != null && owner.has("uuid")) {
+                user = owner.getString("uuid");
+            }
+
+            if (user != null && !user.equals("") && !user.equals(ctx.getAccountNumber())) {
+                return null;
+            }
         }
-        String user = object.get("user");
 
-        if( user != null && !user.equals("") && !user.equals(ctx.getAccountNumber())) {
+        if (object.has("meta")) {
+            JSONObject meta = object.getJSONObject("meta");
+            if (meta != null && meta.has("name")) {
+                String name = meta.getString("name");
+                vlan.setName(name);
+            }
+            if (meta != null && meta.has("description")) {
+                String description = meta.getString("description");
+                vlan.setDescription(description);
+            }
+        }
+
+        if (vlan.getProviderVlanId() == null) {
             return null;
         }
-        String type = object.get("type");
-
-        if( type != null && !type.equals("") && !type.equals("vlan") ) {
-            return null;
-        }
-
-        if( vlan.getProviderVlanId() == null ) {
-            return null;
-        }
-        if( vlan.getName() == null ) {
+        if (vlan.getName() == null) {
             vlan.setName(vlan.getProviderVlanId());
         }
-        if( vlan.getDescription() == null ) {
+        if (vlan.getDescription() == null) {
             vlan.setDescription(vlan.getName());
         }
         return vlan;
+        }
+        catch (JSONException e) {
+            throw new InternalException(e);
+        }
     }
 
     private @Nonnull String toNetworkURL(@Nonnull String vlanId, @Nonnull String action) throws InternalException {
         try {
-            return ("/resources/vlan/" + URLEncoder.encode(vlanId, "utf-8") + "/" + action);
-        }
-        catch( UnsupportedEncodingException e ) {
+            return ("/vlans/" + URLEncoder.encode(vlanId, "utf-8") + "/" + action);
+        } catch (UnsupportedEncodingException e) {
             logger.error("UTF-8 not supported: " + e.getMessage());
             throw new InternalException(e);
         }

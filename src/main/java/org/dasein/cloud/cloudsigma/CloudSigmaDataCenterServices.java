@@ -1,19 +1,22 @@
 /**
- * ========= CONFIDENTIAL =========
- *
- * Copyright (C) 2012 enStratus Networks Inc - ALL RIGHTS RESERVED
+ * Copyright (C) 2012-2013 Dell, Inc.
+ * See annotations for authorship information
  *
  * ====================================================================
- *  NOTICE: All information contained herein is, and remains the
- *  property of enStratus Networks Inc. The intellectual and technical
- *  concepts contained herein are proprietary to enStratus Networks Inc
- *  and may be covered by U.S. and Foreign Patents, patents in process,
- *  and are protected by trade secret or copyright law. Dissemination
- *  of this information or reproduction of this material is strictly
- *  forbidden unless prior written permission is obtained from
- *  enStratus Networks Inc.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  * ====================================================================
  */
+
 package org.dasein.cloud.cloudsigma;
 
 import org.dasein.cloud.CloudException;
@@ -116,7 +119,7 @@ public class CloudSigmaDataCenterServices implements DataCenterServices {
 
         try {
             if( endpoint == null || endpoint.trim().equals("") || endpoint.contains("api.cloudsigma.com") ) {
-                uri = new URI("https://api.zrh.cloudsigma.com");
+                uri = new URI("https://zrh.cloudsigma.com");
             }
             else {
                 uri = new URI(endpoint);
@@ -125,14 +128,14 @@ public class CloudSigmaDataCenterServices implements DataCenterServices {
         catch( URISyntaxException e ) {
             throw new CloudException("Unknown region endpoint: " + endpoint);
         }
-        if( uri.getHost().equals("api.zrh.cloudsigma.com") ) {
+        if( uri.getHost().endsWith("zrh.cloudsigma.com") ) {
             region.setActive(true);
             region.setAvailable(true);
             region.setName("Switzerland 1");
             region.setProviderRegionId("eu-ch1");
             region.setJurisdiction("CH");
         }
-        else if( uri.getHost().equals("api.lvs.cloudsigma.com") ) {
+        else if( uri.getHost().endsWith("lvs.cloudsigma.com") ) {
             region.setActive(true);
             region.setAvailable(true);
             region.setName("Nevada 1");
@@ -141,6 +144,7 @@ public class CloudSigmaDataCenterServices implements DataCenterServices {
         }
         else {
             String[] parts = uri.getHost().split("\\.");
+
 
             if( parts.length == 4 && parts[0].equals("api") && parts[2].equals("cloudsigma") && parts[3].equals("com") ) {
                 region.setActive(true);

@@ -1,21 +1,27 @@
 /**
- * ========= CONFIDENTIAL =========
- *
- * Copyright (C) 2012 enStratus Networks Inc - ALL RIGHTS RESERVED
+ * Copyright (C) 2012-2013 Dell, Inc.
+ * See annotations for authorship information
  *
  * ====================================================================
- *  NOTICE: All information contained herein is, and remains the
- *  property of enStratus Networks Inc. The intellectual and technical
- *  concepts contained herein are proprietary to enStratus Networks Inc
- *  and may be covered by U.S. and Foreign Patents, patents in process,
- *  and are protected by trade secret or copyright law. Dissemination
- *  of this information or reproduction of this material is strictly
- *  forbidden unless prior written permission is obtained from
- *  enStratus Networks Inc.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  * ====================================================================
  */
+
 package org.dasein.cloud.cloudsigma.network.ip;
 
+import org.json.JSONArray;
+import org.json.JSONException;
+import org.json.JSONObject;
 import org.apache.log4j.Logger;
 import org.dasein.cloud.CloudException;
 import org.dasein.cloud.InternalException;
@@ -39,31 +45,30 @@ import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import java.io.UnsupportedEncodingException;
 import java.net.URLEncoder;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.Locale;
-import java.util.Map;
+import java.util.*;
 
 /**
  * Support for static IP addresses in CloudSigma.
- * <p>Created by George Reese: 10/26/12 12:30 PM</p>
+ * <p>Created by Danielle Mayne: 02/20/13 13:56 PM</p>
  * @author George Reese
- * @version 2012.09 initial version
- * @since 2012.09
+ * @author Danielle Mayne
+ * @version 2013.02 initial version
+ * @since 2013.02
  */
 public class StaticIPSupport implements IpAddressSupport {
     static private final Logger logger = CloudSigma.getLogger(StaticIPSupport.class);
 
     private CloudSigma provider;
 
-    public StaticIPSupport(@Nonnull CloudSigma provider) { this.provider = provider; }
+    public StaticIPSupport(@Nonnull CloudSigma provider) {
+        this.provider = provider;
+    }
 
     @Override
     public void assign(@Nonnull String addressId, @Nonnull String serverId) throws InternalException, CloudException {
         IpAddress address = getIpAddress(addressId);
 
-        if( address == null ) {
+        if (address == null) {
             throw new CloudException("No such IP address: " + address);
         }
         provider.getComputeServices().getVirtualMachineSupport().assignIP(serverId, address);
@@ -83,7 +88,16 @@ public class StaticIPSupport implements IpAddressSupport {
     public IpAddress getIpAddress(@Nonnull String addressId) throws InternalException, CloudException {
         CloudSigmaMethod method = new CloudSigmaMethod(provider);
 
-        return toIP(method.getObject(toAddressURL(addressId, "info")), false);
+        try {
+            String object = (method.getString(toAddressURL(addressId, "")));
+            if (object != null) {
+                return toIP(new JSONObject(object), false);
+            }
+        }
+        catch (JSONException e) {
+            throw new InternalException(e);
+        }
+        return null;
     }
 
     @Override
@@ -103,11 +117,13 @@ public class StaticIPSupport implements IpAddressSupport {
 
     @Override
     public boolean isAssigned(@Nonnull IPVersion version) throws CloudException, InternalException {
+        //todo dmayne 20130221: should ipv6 be added here?
         return version.equals(IPVersion.IPV4);
     }
 
     @Override
     public boolean isAssignablePostLaunch(@Nonnull IPVersion version) throws CloudException, InternalException {
+        //todo dmayne 20130221: should ipv6 be added here?
         return version.equals(IPVersion.IPV4);
     }
 
@@ -123,12 +139,16 @@ public class StaticIPSupport implements IpAddressSupport {
 
     @Override
     public boolean isRequestable(@Nonnull AddressType type) {
-        return type.equals(AddressType.PUBLIC);
+        //dmayne 20130221: requesting ip addresses is not supported in api 2.0
+        //return type.equals(AddressType.PUBLIC);
+        return false;
     }
 
     @Override
     public boolean isRequestable(@Nonnull IPVersion version) throws CloudException, InternalException {
-        return version.equals(IPVersion.IPV4);
+        //dmayne 20130221: requesting ip addresses is not supported in api 2.0
+        //return version.equals(IPVersion.IPV4);
+        return false;
     }
 
     @Override
@@ -143,24 +163,67 @@ public class StaticIPSupport implements IpAddressSupport {
 
     @Override
     public @Nonnull Iterable<IpAddress> listPublicIpPool(boolean unassignedOnly) throws InternalException, CloudException {
+        //todo dmayne 20130221: should ipv6 be added here?
         return listIpPool(IPVersion.IPV4, unassignedOnly);
     }
 
     @Override
     public @Nonnull Iterable<IpAddress> listIpPool(@Nonnull IPVersion version, boolean unassignedOnly) throws InternalException, CloudException {
-        if( version.equals(IPVersion.IPV4) ) {
-            CloudSigmaMethod method = new CloudSigmaMethod(provider);
-            Collection<Map<String,String>> pool = method.list("/resources/ip/info");
+        if (version.equals(IPVersion.IPV4)) {
+
             ArrayList<IpAddress> addresses = new ArrayList<IpAddress>();
+            CloudSigmaMethod method = new CloudSigmaMethod(provider);
 
-            if( pool == null ) {
-                throw new CloudException("Unable to communicate with CloudSigma endpoint");
-            }
-            for( Map<String,String> object : pool ) {
-                IpAddress address = toIP(object, unassignedOnly);
+            boolean moreData = true;
+            String baseTarget = "/ips/detail/";
+            String target = "";
 
-                if( address != null ) {
-                    addresses.add(address);
+            while(moreData)  {
+                //dmayne 20130218: JSON Parsing
+                logger.debug("Target "+target);
+                target = baseTarget+target;
+                logger.debug("final target "+target);
+
+                JSONObject pool = method.list(target);
+
+                if (pool == null) {
+                    throw new CloudException("Unable to communicate with CloudSigma endpoint");
+                }
+                //dmayne 20130218: use JSON parsing
+                try {
+                    JSONArray objects = pool.getJSONArray("objects");
+                    for (int i = 0; i < objects.length(); i++) {
+                        JSONObject jObj = objects.getJSONObject(i);
+
+                        IpAddress address = toIP(jObj, unassignedOnly);
+
+                        if (address != null) {
+                            addresses.add(address);
+                        }
+                    }
+
+                    //dmayne 20130314: check if there are more pages
+                    if (pool.has("meta")) {
+                        logger.debug("Found meta tag");
+                        JSONObject meta = pool.getJSONObject("meta");
+
+                        logger.debug("Number of objects "+addresses.size()+" out of "+meta.getString("total_count"));
+
+                        if (meta.has("next") && !(meta.isNull("next")) && !meta.getString("next").equals("")) {
+                            logger.debug("Found new page "+meta.getString("next"));
+                            target = meta.getString("next");
+                            logger.debug("target "+target);
+                            target = target.substring(target.indexOf("?"));
+                            logger.debug("new target "+target);
+                            moreData = true;
+                        }
+                        else  {
+                            moreData = false;
+                        }
+                    }
+                }
+                catch (JSONException e) {
+                    throw new InternalException(e);
                 }
             }
             return addresses;
@@ -170,19 +233,61 @@ public class StaticIPSupport implements IpAddressSupport {
 
     @Override
     public @Nonnull Iterable<ResourceStatus> listIpPoolStatus(@Nonnull IPVersion version) throws InternalException, CloudException {
-        if( version.equals(IPVersion.IPV4) ) {
-            CloudSigmaMethod method = new CloudSigmaMethod(provider);
-            Collection<Map<String,String>> pool = method.list("/resources/ip/info");
+        if (version.equals(IPVersion.IPV4)) {
+
             ArrayList<ResourceStatus> addresses = new ArrayList<ResourceStatus>();
+            CloudSigmaMethod method = new CloudSigmaMethod(provider);
 
-            if( pool == null ) {
-                throw new CloudException("Unable to communicate with CloudSigma endpoint");
-            }
-            for( Map<String,String> object : pool ) {
-                ResourceStatus address = toStatus(object);
+            boolean moreData = true;
+            String baseTarget = "/ips/detail/";
+            String target = "";
 
-                if( address != null ) {
-                    addresses.add(address);
+            while(moreData)  {
+                //dmayne 20130218: JSON Parsing
+                logger.debug("Target "+target);
+                target = baseTarget+target;
+                logger.debug("final target "+target);
+
+                JSONObject pool = method.list(target);
+
+                if (pool == null) {
+                    throw new CloudException("Unable to communicate with CloudSigma endpoint");
+                }
+                //dmayne 20130218: use JSON parsing
+                try {
+                    JSONArray objects = pool.getJSONArray("objects");
+                    for (int i = 0; i < objects.length(); i++) {
+                        JSONObject jObj = objects.getJSONObject(i);
+
+                        ResourceStatus address = toStatus(jObj);
+
+                        if (address != null) {
+                            addresses.add(address);
+                        }
+                    }
+
+                    //dmayne 20130314: check if there are more pages
+                    if (pool.has("meta")) {
+                        logger.debug("Found meta tag");
+                        JSONObject meta = pool.getJSONObject("meta");
+
+                        logger.debug("Number of objects "+addresses.size()+" out of "+meta.getString("total_count"));
+
+                        if (meta.has("next") && !(meta.isNull("next")) && !meta.getString("next").equals("")) {
+                            logger.debug("Found new page "+meta.getString("next"));
+                            target = meta.getString("next");
+                            logger.debug("target "+target);
+                            target = target.substring(target.indexOf("?"));
+                            logger.debug("new target "+target);
+                            moreData = true;
+                        }
+                        else  {
+                            moreData = false;
+                        }
+                    }
+                }
+                catch (JSONException e) {
+                    throw  new InternalException(e);
                 }
             }
             return addresses;
@@ -197,21 +302,21 @@ public class StaticIPSupport implements IpAddressSupport {
 
     @Override
     public @Nonnull Iterable<IPVersion> listSupportedIPVersions() throws CloudException, InternalException {
+        //todo dmayne 20130221: should ipv6 be added here?
         return Collections.singletonList(IPVersion.IPV4);
     }
 
     @Override
     public void releaseFromPool(@Nonnull String addressId) throws InternalException, CloudException {
-        CloudSigmaMethod method = new CloudSigmaMethod(provider);
-
-        method.getObject(toAddressURL(addressId, "destroy"));
+        //dmayne 20130222: api 2.0 does not support deleting ips
+        throw new OperationNotSupportedException("IP deletion handled through subscriptions");
     }
 
     @Override
     public void releaseFromServer(@Nonnull String addressId) throws InternalException, CloudException {
         IpAddress address = getIpAddress(addressId);
 
-        if( address == null ) {
+        if (address == null) {
             throw new CloudException("No such IP address: " + address);
         }
         provider.getComputeServices().getVirtualMachineSupport().releaseIP(address);
@@ -219,25 +324,14 @@ public class StaticIPSupport implements IpAddressSupport {
 
     @Override
     public @Nonnull String request(@Nonnull AddressType typeOfAddress) throws InternalException, CloudException {
-        if( typeOfAddress.equals(AddressType.PRIVATE) ) {
-            throw new CloudException("Static private IPs are not supported");
-        }
-        return request(IPVersion.IPV4);
+        //dmayne: 20130221 api 2.0 does not support requesting ips
+        throw new OperationNotSupportedException("IP request handled through subscriptions");
     }
 
     @Override
     public @Nonnull String request(@Nonnull IPVersion version) throws InternalException, CloudException {
-        if( !version.equals(IPVersion.IPV4) ) {
-            throw new OperationNotSupportedException("Unsupported IP version: " + version);
-        }
-        CloudSigmaMethod method = new CloudSigmaMethod(provider);
-
-        IpAddress address = toIP(method.postObject("/resources/ip/create", ""), false);
-
-        if( address == null ) {
-            throw new CloudException("No error was returned, but no IP address was allocated");
-        }
-        return address.getProviderIpAddressId();
+        //dmayne 20130221: creating ips not supported in api 2.0
+        throw new OperationNotSupportedException("IP request handled through subscriptions");
     }
 
     @Override
@@ -265,18 +359,18 @@ public class StaticIPSupport implements IpAddressSupport {
         return new String[0];
     }
 
-    private @Nullable IpAddress toIP(@Nullable Map<String,String> object, boolean unassignedOnly) throws CloudException, InternalException {
-        if( object == null ) {
+    private @Nullable IpAddress toIP(@Nullable JSONObject object, boolean unassignedOnly) throws CloudException, InternalException {
+        if (object == null) {
             return null;
         }
         ProviderContext ctx = provider.getContext();
 
-        if( ctx == null ) {
+        if (ctx == null) {
             throw new NoContextException();
         }
         String regionId = ctx.getRegionId();
 
-        if( regionId == null ) {
+        if (regionId == null) {
             throw new CloudSigmaConfigurationException("No region was specified for this request");
         }
 
@@ -286,67 +380,92 @@ public class StaticIPSupport implements IpAddressSupport {
         address.setProviderLoadBalancerId(null);
         address.setProviderNetworkInterfaceId(null);
         address.setRegionId(regionId);
+        //todo dmayne 20130221: how do we determine v4 or v6 address?
         address.setVersion(IPVersion.IPV4);
         address.setAddressType(AddressType.PUBLIC);
 
-        String id = object.get("resource");
+        try {
+            String id = object.getString("uuid");
 
-        if( id != null && !id.equals("") ) {
-            address.setIpAddressId(id);
-            address.setAddress(id);
+            if (id != null && !id.equals("")) {
+                address.setIpAddressId(id);
+                address.setAddress(id);
+            }
+
+            String host = null;
+            JSONObject server = null;
+            if (object.has("server") && !object.isNull("server")) {
+                server = object.getJSONObject("server");
+                if (server != null) {
+                    host = server.getString("uuid");
+                }
+            }
+
+            if (host != null && !host.equals("")) {
+                address.setServerId(host);
+            }
+
+            if (object.has("owner")) {
+                JSONObject owner = object.getJSONObject("owner");
+                String user = null;
+                if (owner!= null && owner.has("uuid")) {
+                    user = owner.getString("uuid");
+                }
+
+                if (user != null && !user.equals("") && !user.equals(ctx.getAccountNumber())) {
+                    return null;
+                }
+            }
+            if (address.getServerId() != null && unassignedOnly) {
+                return null;
+            }
         }
-        String host = object.get("claimed");
-
-        if( host != null && !host.equals("") ) {
-            address.setServerId(host);
-        }
-
-        String user = object.get("user");
-
-        if( user != null && !user.equals("") && !user.equals(ctx.getAccountNumber())) {
-            return null;
-        }
-        String type = object.get("type");
-
-        if( type != null && !type.equals("") && !type.equals("ip") ) {
-            return null;
-        }
-        if( address.getServerId() != null && unassignedOnly ) {
-            return null;
+        catch (JSONException e) {
+            throw new  InternalException(e);
         }
         return address;
     }
 
-    private @Nullable ResourceStatus toStatus(@Nullable Map<String,String> object) throws CloudException, InternalException {
-        if( object == null ) {
+    private @Nullable ResourceStatus toStatus(@Nullable JSONObject object) throws CloudException, InternalException {
+        if (object == null) {
             return null;
         }
         ProviderContext ctx = provider.getContext();
 
-        if( ctx == null ) {
+        if (ctx == null) {
             throw new NoContextException();
         }
         String regionId = ctx.getRegionId();
 
-        if( regionId == null ) {
+        if (regionId == null) {
             throw new CloudSigmaConfigurationException("No region was specified for this request");
         }
-        String id = object.get("resource");
+        try {
+        String id = object.getString("uuid");
 
-        if( id != null && !id.equals("") ) {
-            String host = object.get("claimed");
+        if (id != null && !id.equals("")) {
+            String host = null;
+            JSONObject server = null;
+            if (object.has("server")) {
+                server = object.getJSONObject("server");
+                if (server != null) {
+                    host = server.getString("uuid");
+                }
+            }
             boolean available = (host != null && !host.equals(""));
 
             return new ResourceStatus(id, available);
+        }
+        } catch (JSONException e){
+            throw new InternalException(e);
         }
         return null;
     }
 
     private @Nonnull String toAddressURL(@Nonnull String addressId, @Nonnull String action) throws InternalException {
         try {
-            return ("/resources/ip/" + URLEncoder.encode(addressId, "utf-8") + "/" + action);
-        }
-        catch( UnsupportedEncodingException e ) {
+            return ("/ips/" + URLEncoder.encode(addressId, "utf-8") + "/" + action);
+        } catch (UnsupportedEncodingException e) {
             logger.error("UTF-8 not supported: " + e.getMessage());
             throw new InternalException(e);
         }
