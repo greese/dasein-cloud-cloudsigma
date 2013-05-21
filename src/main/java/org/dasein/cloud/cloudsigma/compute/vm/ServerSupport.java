@@ -619,7 +619,6 @@ public class ServerSupport extends AbstractVMSupport {
                 if (logger.isInfoEnabled()) {
                     logger.info("Waiting for new drive " + driveId + " to become active...");
                 }
-                System.out.println("Got " + driveId + " with " + status);
                 while (timeout > System.currentTimeMillis()) {
                     if (logger.isDebugEnabled()) {
                         logger.debug("status.drive." + driveId + "=" + status);

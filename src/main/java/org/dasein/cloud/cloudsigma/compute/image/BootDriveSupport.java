@@ -816,7 +816,20 @@ public class BootDriveSupport extends AbstractImageSupport {
             String s = drive.getString("status");
 
             if (s != null) {
-                if (s.equalsIgnoreCase("mounted")) {
+                if( s.equalsIgnoreCase("mounted") || s.equalsIgnoreCase("copying") ) {
+                    image.setCurrentState(MachineImageState.PENDING);
+                }
+                else if( s.equalsIgnoreCase("unmounted") ) {
+                    image.setCurrentState(MachineImageState.ACTIVE);
+                }
+                else if( s.equalsIgnoreCase("unavailable") ) {
+                    image.setCurrentState(MachineImageState.DELETED);
+                }
+                else {
+                    logger.warn("WARN: Unknown drive state for CloudSigma: " + s);
+                }
+                /*
+                if (s.equalsIgnoreCase("mounted") ) {
                     image.setCurrentState(MachineImageState.ACTIVE);
                 } else if (s.equalsIgnoreCase("unmounted") || s.equalsIgnoreCase("unavailable")) {
                     image.setCurrentState(MachineImageState.DELETED);
@@ -825,6 +838,7 @@ public class BootDriveSupport extends AbstractImageSupport {
                 } else {
                     logger.warn("WARN: Unknown drive state for CloudSigma: " + s);
                 }
+                */
             }
             if (MachineImageState.ACTIVE.equals(image.getCurrentState())) {
                 s = null;
