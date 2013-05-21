@@ -696,6 +696,13 @@ public class ServerSupport extends AbstractVMSupport {
                     nics.put(newNic);
                     newServer.put("nics", nics);
                 }
+                else {
+                    JSONObject newIP = new JSONObject();
+                    newIP.put("conf", "dhcp");
+                    newNic.put("ip_v4_conf", newIP);
+                    nics.put(newNic);
+                    newServer.put("nics", nics);
+                }
 
                 CloudSigmaMethod method = new CloudSigmaMethod(provider);
 
@@ -1365,6 +1372,9 @@ public class ServerSupport extends AbstractVMSupport {
                                 JSONObject ipObj = ipv4.getJSONObject("ip");
                                 if (ipObj != null) {
                                     ip4 = ipObj.getString("uuid");
+                                    if (ip4 != null && (!ip4.equalsIgnoreCase(""))) {
+                                        allIps.add(ip4);
+                                    }
                                 }
                             }
                             if (ipv4.has("conf")) {
@@ -1374,7 +1384,6 @@ public class ServerSupport extends AbstractVMSupport {
                                         if (vm.getProviderAssignedIpAddressId() == null) {
                                             vm.setProviderAssignedIpAddressId(ip4);
                                         }
-                                        allIps.add(ip4);
                                     }
                                 }
                             }
@@ -1390,6 +1399,9 @@ public class ServerSupport extends AbstractVMSupport {
                                 JSONObject ip6Obj = ipv6.getJSONObject("ip");
                                 if (ip6Obj != null) {
                                     ip6 = ip6Obj.getString("uuid");
+                                    if (ip6 != null && (!ip6.equalsIgnoreCase(""))) {
+                                        allIps.add(ip6);
+                                    }
                                 }
                             }
                             if (ipv6.has("conf")) {
@@ -1399,7 +1411,6 @@ public class ServerSupport extends AbstractVMSupport {
                                         if (vm.getProviderAssignedIpAddressId() == null) {
                                             vm.setProviderAssignedIpAddressId(ip6);
                                         }
-                                        allIps.add(ip6);
                                     }
                                 }
                             }
