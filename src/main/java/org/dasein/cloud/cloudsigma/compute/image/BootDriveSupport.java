@@ -545,21 +545,6 @@ public class BootDriveSupport extends AbstractImageSupport {
     }
 
     @Override
-    public void removeAllImageShares(@Nonnull String providerImageId) throws CloudException, InternalException {
-        throw new OperationNotSupportedException("Image sharing is not supported");
-    }
-
-    @Override
-    public void removeImageShare(@Nonnull String providerImageId, @Nonnull String accountNumber) throws CloudException, InternalException {
-        throw new OperationNotSupportedException("Image sharing is not supported");
-    }
-
-    @Override
-    public void removePublicShare(@Nonnull String providerImageId) throws CloudException, InternalException {
-        throw new OperationNotSupportedException("Image sharing is not supported");
-    }
-
-    @Override
     @Deprecated
     public @Nonnull Iterable<MachineImage> searchMachineImages(@Nullable String keyword, @Nullable Platform platform, @Nullable Architecture architecture) throws CloudException, InternalException {
         ArrayList<MachineImage> list = new ArrayList<MachineImage>();
@@ -706,31 +691,6 @@ public class BootDriveSupport extends AbstractImageSupport {
     @Override
     public boolean supportsPublicLibrary(@Nonnull ImageClass cls) throws CloudException, InternalException {
         return true;
-    }
-
-    @Override
-    public void updateTags(@Nonnull String imageId, @Nonnull Tag... tags) throws CloudException, InternalException {
-        // NO-OP
-    }
-
-    @Override
-    public void updateTags(@Nonnull String[] imageIds, @Nonnull Tag... tags) throws CloudException, InternalException {
-        //To change body of implemented methods use File | Settings | File Templates.
-    }
-
-    @Override
-    public void removeTags(@Nonnull String imageId, @Nonnull Tag... tags) throws CloudException, InternalException {
-        //To change body of implemented methods use File | Settings | File Templates.
-    }
-
-    @Override
-    public void removeTags(@Nonnull String[] imageIds, @Nonnull Tag... tags) throws CloudException, InternalException {
-        //To change body of implemented methods use File | Settings | File Templates.
-    }
-
-    @Override
-    public @Nonnull String[] mapServiceAction(@Nonnull ServiceAction action) {
-        return new String[0];
     }
 
     private @Nullable MachineImage toMachineImage(@Nullable JSONObject drive) throws CloudException, InternalException {

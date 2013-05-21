@@ -19,10 +19,10 @@
 
 package org.dasein.cloud.cloudsigma.network.ip;
 
+import org.apache.log4j.Logger;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
-import org.apache.log4j.Logger;
 import org.dasein.cloud.CloudException;
 import org.dasein.cloud.InternalException;
 import org.dasein.cloud.OperationNotSupportedException;
@@ -45,7 +45,9 @@ import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import java.io.UnsupportedEncodingException;
 import java.net.URLEncoder;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Locale;
 
 /**
  * Support for static IP addresses in CloudSigma.
@@ -393,7 +395,8 @@ public class StaticIPSupport implements IpAddressSupport {
             }
 
             String host = null;
-            JSONObject server = null;
+            JSONObject server;
+
             if (object.has("server") && !object.isNull("server")) {
                 server = object.getJSONObject("server");
                 if (server != null) {
@@ -445,8 +448,9 @@ public class StaticIPSupport implements IpAddressSupport {
 
         if (id != null && !id.equals("")) {
             String host = null;
-            JSONObject server = null;
-            if (object.has("server")) {
+            JSONObject server;
+
+            if (object.has("server") && !object.isNull("server") ) {
                 server = object.getJSONObject("server");
                 if (server != null) {
                     host = server.getString("uuid");
@@ -457,7 +461,7 @@ public class StaticIPSupport implements IpAddressSupport {
             return new ResourceStatus(id, available);
         }
         } catch (JSONException e){
-            throw new InternalException(e);
+            throw new InternalException(e + " -> " + object);
         }
         return null;
     }

@@ -19,7 +19,9 @@
 
 package org.dasein.cloud.cloudsigma.compute.block;
 
+import org.dasein.cloud.OperationNotSupportedException;
 import org.dasein.cloud.Tag;
+import org.dasein.util.CalendarWrapper;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -74,9 +76,11 @@ public class DataDriveSupport extends AbstractVolumeSupport {
     @Override
     public @Nonnull String createVolume(@Nonnull VolumeCreateOptions options) throws InternalException, CloudException {
         if (options.getSnapshotId() != null) {
-            throw new CloudException("CloudSigma does not support snapshots");
+            throw new OperationNotSupportedException("CloudSigma does not support snapshots");
         }
-
+        if( !VolumeFormat.BLOCK.equals(options.getFormat()) ) {
+            throw new OperationNotSupportedException("Only block volumes are supported");
+        }
         try {
             logger.debug("Creating volume: "+options.getName()+", ("+options.getDescription()+")");
             JSONObject newDrive = new JSONObject();
@@ -335,36 +339,27 @@ public class DataDriveSupport extends AbstractVolumeSupport {
 
     @Override
     public void remove(@Nonnull String volumeId) throws InternalException, CloudException {
+        Volume v = getVolume(volumeId);
+
+        long timeout = System.currentTimeMillis() + (CalendarWrapper.MINUTE * 5L);
+
+        while( timeout > System.currentTimeMillis() ) {
+            if( v == null ) {
+                return;
+            }
+            if( !VolumeState.PENDING.equals(v.getCurrentState()) ) {
+                break;
+            }
+            try { Thread.sleep(15000L); }
+            catch( InterruptedException ignore ) { }
+            try { v = getVolume(volumeId); }
+            catch( Throwable ignore ) { }
+        }
         CloudSigmaMethod method = new CloudSigmaMethod(provider);
 
         if (method.deleteString(toDriveURL(volumeId, ""), "") == null) {
             throw new CloudException("Unable to identify drives endpoint for removal");
         }
-    }
-
-    @Override
-    public void removeTags(@Nonnull String volumeId, @Nonnull Tag... tags) throws CloudException, InternalException {
-        //To change body of implemented methods use File | Settings | File Templates.
-    }
-
-    @Override
-    public void removeTags(@Nonnull String[] volumeIds, @Nonnull Tag... tags) throws CloudException, InternalException {
-        //To change body of implemented methods use File | Settings | File Templates.
-    }
-
-    @Override
-    public void updateTags(@Nonnull String volumeId, @Nonnull Tag... tags) throws CloudException, InternalException {
-        //To change body of implemented methods use File | Settings | File Templates.
-    }
-
-    @Override
-    public void updateTags(@Nonnull String[] volumeIds, @Nonnull Tag... tags) throws CloudException, InternalException {
-        //To change body of implemented methods use File | Settings | File Templates.
-    }
-
-    @Override
-    public @Nonnull String[] mapServiceAction(@Nonnull ServiceAction action) {
-        return new String[0];
     }
 
     private @Nullable Volume toVolume(@Nullable JSONObject drive) throws CloudException, InternalException {
