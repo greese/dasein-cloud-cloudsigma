@@ -19,6 +19,7 @@
 
 package org.dasein.cloud.cloudsigma.compute.vm;
 
+import org.dasein.cloud.cloudsigma.CloudSigmaException;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -227,6 +228,8 @@ public class ServerSupport extends AbstractVMSupport {
                         try {
                             try {
                                 ServerSupport.this.start(id);
+                                try { Thread.sleep(2000L); }
+                                catch( InterruptedException ignore ) { }
                             } catch (Exception e) {
                                 logger.warn("Failed to start VM post-change: " + e.getMessage());
                             }
@@ -310,6 +313,8 @@ public class ServerSupport extends AbstractVMSupport {
                             try {
                                 try {
                                     ServerSupport.this.start(id);
+                                    try { Thread.sleep(2000L); }
+                                    catch( InterruptedException ignore ) { }
                                 } catch (Exception e) {
                                     logger.warn("Failed to start VM post-create: " + e.getMessage());
                                 }
@@ -337,6 +342,8 @@ public class ServerSupport extends AbstractVMSupport {
                     try {
                         try {
                             ServerSupport.this.start(vmId);
+                            try { Thread.sleep(2000L); }
+                            catch( InterruptedException ignore ) { }
                         } catch (Throwable ignore) {
                         }
                     } finally {
@@ -776,6 +783,8 @@ public class ServerSupport extends AbstractVMSupport {
                                         if (logger.isInfoEnabled()) {
                                             logger.info("VM " + id + " started");
                                         }
+                                        try { Thread.sleep(2000L); }
+                                        catch( InterruptedException ignore ) { }
                                         return;
                                     } catch (Exception e) {
                                         logger.warn("Failed to start virtual machine " + id + " post-create: " + e.getMessage());
@@ -1064,11 +1073,17 @@ public class ServerSupport extends AbstractVMSupport {
 
     @Override
     public void start(@Nonnull String vmId) throws InternalException, CloudException {
-        System.out.println("Starting: " + vmId);
         CloudSigmaMethod method = new CloudSigmaMethod(provider);
 
-        method.postString(toServerURL(vmId, "action/?do=start"), "");
-        System.out.println("Success");
+        try {
+            method.postString(toServerURL(vmId, "action/?do=start"), "");
+        }
+        catch( CloudSigmaException e ) {
+            if( e.getMessage().contains("Cannot start guest in state") ) {
+                return;
+            }
+            throw e;
+        }
     }
 
     @Override
