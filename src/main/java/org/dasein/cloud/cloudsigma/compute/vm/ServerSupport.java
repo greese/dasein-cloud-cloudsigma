@@ -52,6 +52,7 @@ import java.net.URLEncoder;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.Locale;
 import java.util.Random;
 import java.util.TreeSet;
@@ -64,13 +65,12 @@ import java.util.TreeSet;
  * @version 2013.02 initial version
  * @since 2013.02
  */
-public class ServerSupport extends AbstractVMSupport {
+public class ServerSupport implements VirtualMachineSupport {
     static private final Logger logger = CloudSigma.getLogger(ServerSupport.class);
 
     private CloudSigma provider;
 
     public ServerSupport(@Nonnull CloudSigma provider) {
-        super(provider);
         this.provider = provider;
     }
 
@@ -295,7 +295,7 @@ public class ServerSupport extends AbstractVMSupport {
             //dmayne 20130218: use JSON Parsing
             JSONObject object = new JSONObject(method.postString(toServerURL(vmId, "action/?do=clone"), ""));
             if (object != null) {
-                vm = toVirtualMachine((JSONObject) object);
+                vm = toVirtualMachine(object);
             }
             if (vm == null) {
                 throw new CloudException("No virtual machine was provided in the response");
@@ -398,7 +398,6 @@ public class ServerSupport extends AbstractVMSupport {
             JSONObject json = new JSONObject(obj);
             JSONArray drives = json.getJSONArray("drives");
             JSONArray newArray = new JSONArray();
-            int index = 0;
             for (int i = 0; i < drives.length(); i++) {
                 JSONObject drive = drives.getJSONObject(i);
                 JSONObject driveObj = drive.getJSONObject("drive");
@@ -508,8 +507,25 @@ public class ServerSupport extends AbstractVMSupport {
     }
 
     @Override
+    public VmStatistics getVMStatistics(String vmId, long from, long to) throws InternalException, CloudException {
+        return new VmStatistics();
+    }
+
+    @Nonnull
+    @Override
+    public Iterable<VmStatistics> getVMStatisticsForPeriod(@Nonnull String vmId, @Nonnegative long from, @Nonnegative long to) throws InternalException, CloudException {
+        return Collections.emptyList();
+    }
+
+    @Override
     public @Nonnull Requirement identifyImageRequirement(@Nonnull ImageClass cls) throws CloudException, InternalException {
         return (cls.equals(ImageClass.MACHINE) ? Requirement.REQUIRED : Requirement.NONE);
+    }
+
+    @Nonnull
+    @Override
+    public Requirement identifyPasswordRequirement() throws CloudException, InternalException {
+        return identifyPasswordRequirement(Platform.UNKNOWN);
     }
 
     @Override
@@ -520,6 +536,12 @@ public class ServerSupport extends AbstractVMSupport {
     @Override
     public @Nonnull Requirement identifyRootVolumeRequirement() throws CloudException, InternalException {
         return Requirement.NONE;
+    }
+
+    @Nonnull
+    @Override
+    public Requirement identifyShellKeyRequirement() throws CloudException, InternalException {
+        return identifyShellKeyRequirement(Platform.UNKNOWN);
     }
 
     @Override
@@ -671,7 +693,7 @@ public class ServerSupport extends AbstractVMSupport {
                 newServer.put("drives", drives);
 
                 String productId = withLaunchOptions.getStandardProductId();
-                int cpuCount = 1, cpuSpeed = 1000, ramInMb = 512;
+                int cpuCount = 1, cpuSpeed = 1000, ramInMb;
                 long ramInBytes = 536870912;
                 String[] parts = productId.replaceAll("\n", " ").split(":");
                 if (parts.length > 1) {
@@ -719,10 +741,9 @@ public class ServerSupport extends AbstractVMSupport {
 
                 //dmayne 20130227: check value returned and extract created server from the objects array
                 if (obj != null) {
-                    JSONObject object = (JSONObject) obj;
-                    JSONArray arr = object.getJSONArray("objects");
+                    JSONArray arr = obj.getJSONArray("objects");
                     JSONObject server = arr.getJSONObject(0);
-                    vm = toVirtualMachine((JSONObject) server);
+                    vm = toVirtualMachine(server);
                 }
 
                 if (logger.isDebugEnabled()) {
@@ -822,6 +843,60 @@ public class ServerSupport extends AbstractVMSupport {
                 logger.trace("EXIT - " + ServerSupport.class.getName() + ".launch()");
             }
         }
+    }
+
+    @Override
+    public @Nonnull VirtualMachine launch(@Nonnull String fromMachineImageId, @Nonnull VirtualMachineProduct product, @Nonnull String dataCenterId, @Nonnull String name, @Nonnull String description, @Nullable String withKeypairId, @Nullable String inVlanId, boolean withAnalytics, boolean asSandbox, @Nullable String... firewallIds) throws InternalException, CloudException {
+        VMLaunchOptions options = VMLaunchOptions.getInstance(product.getProviderProductId(), fromMachineImageId, name, name, description);
+
+        options.inDataCenter(dataCenterId);
+        if( withKeypairId != null ) {
+            options.withBoostrapKey(withKeypairId);
+        }
+        if( inVlanId != null ) {
+            options.inVlan(null, dataCenterId, inVlanId);
+        }
+        if( withAnalytics ) {
+            options.withExtendedAnalytics();
+        }
+        if( firewallIds != null ) {
+            options.behindFirewalls(firewallIds);
+        }
+        return launch(options);
+    }
+
+    @Override
+    public @Nonnull VirtualMachine launch(@Nonnull String fromMachineImageId, @Nonnull VirtualMachineProduct product, @Nonnull String dataCenterId, @Nonnull String name, @Nonnull String description, @Nullable String withKeypairId, @Nullable String inVlanId, boolean withAnalytics, boolean asSandbox, @Nullable String[] firewallIds, @Nullable Tag... tags) throws InternalException, CloudException {
+        VMLaunchOptions options = VMLaunchOptions.getInstance(product.getProviderProductId(), fromMachineImageId, name, name, description);
+
+        options.inDataCenter(dataCenterId);
+        if( withKeypairId != null ) {
+            options.withBoostrapKey(withKeypairId);
+        }
+        if( inVlanId != null ) {
+            options.inVlan(null, dataCenterId, inVlanId);
+        }
+        if( withAnalytics ) {
+            options.withExtendedAnalytics();
+        }
+        if( firewallIds != null ) {
+            options.behindFirewalls(firewallIds);
+        }
+        if( tags != null ) {
+            HashMap<String,Object> metaData = new HashMap<String, Object>();
+
+            for( Tag tag : tags ) {
+                metaData.put(tag.getKey(), tag.getValue());
+            }
+            options.withMetaData(metaData);
+        }
+        return launch(options);
+    }
+
+    @Nonnull
+    @Override
+    public Iterable<String> listFirewalls(@Nonnull String vmId) throws InternalException, CloudException {
+        return Collections.emptyList();
     }
 
     private transient ArrayList<VirtualMachineProduct> cachedProducts;
@@ -1045,7 +1120,6 @@ public class ServerSupport extends AbstractVMSupport {
             JSONObject json = new JSONObject(obj);
             JSONArray nics = json.getJSONArray("nics");
             JSONArray newArray = new JSONArray();
-            int index = 0;
             for (int i = 0; i < nics.length(); i++) {
                 JSONObject nic = (JSONObject) nics.get(i);
                 if (address.getVersion().equals(IPVersion.IPV4)) {
@@ -1087,6 +1161,11 @@ public class ServerSupport extends AbstractVMSupport {
     }
 
     @Override
+    public void stop(@Nonnull String vmId) throws InternalException, CloudException {
+        stop(vmId, true);
+    }
+
+    @Override
     public void stop(@Nonnull String vmId, boolean force) throws InternalException, CloudException {
         if (logger.isTraceEnabled()) {
             logger.trace("ENTER - " + ServerSupport.class.getName() + ".stop(" + vmId + "," + force + ")");
@@ -1115,6 +1194,11 @@ public class ServerSupport extends AbstractVMSupport {
                 logger.trace("EXIT - " + ServerSupport.class.getName() + ".stop()");
             }
         }
+    }
+
+    @Override
+    public boolean supportsAnalytics() throws CloudException, InternalException {
+        return false;
     }
 
     @Override
@@ -1192,21 +1276,6 @@ public class ServerSupport extends AbstractVMSupport {
     @Override
     public void updateTags(@Nonnull String vmId, @Nonnull Tag... tags) throws CloudException, InternalException {
         // NO-OP
-    }
-
-    @Override
-    public void updateTags(@Nonnull String[] vmIds, @Nonnull Tag... tags) throws CloudException, InternalException {
-        //To change body of implemented methods use File | Settings | File Templates.
-    }
-
-    @Override
-    public void removeTags(@Nonnull String vmId, @Nonnull Tag... tags) throws CloudException, InternalException {
-        //To change body of implemented methods use File | Settings | File Templates.
-    }
-
-    @Override
-    public void removeTags(@Nonnull String[] vmIds, @Nonnull Tag... tags) throws CloudException, InternalException {
-        //To change body of implemented methods use File | Settings | File Templates.
     }
 
     @Override
@@ -1492,7 +1561,7 @@ public class ServerSupport extends AbstractVMSupport {
                 vm.setCurrentState(VmState.PENDING);
             }
 
-            String cpuCount = "1", cpuSpeed = "1000", ramInMB = "512", ramInBytes = "0";
+            String cpuCount = "1", cpuSpeed = "1000", ramInMB = "512", ramInBytes;
 
             try {
                 String tmp = object.getString("smp");

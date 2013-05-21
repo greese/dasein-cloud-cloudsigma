@@ -19,7 +19,7 @@
 
 package org.dasein.cloud.cloudsigma.network.vlan;
 
-import org.dasein.cloud.network.AbstractVLANSupport;
+import org.dasein.cloud.network.VLANSupport;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -64,13 +64,12 @@ import java.util.*;
  * @version 2013.02 initial version
  * @since 2013.02
  */
-public class ServerVLANSupport extends AbstractVLANSupport {
+public class ServerVLANSupport implements VLANSupport {
     static private final Logger logger = CloudSigma.getLogger(ServerVLANSupport.class);
 
     private CloudSigma provider;
 
     public ServerVLANSupport(@Nonnull CloudSigma provider) {
-        super(provider);
         this.provider = provider;
     }
 
@@ -111,16 +110,6 @@ public class ServerVLANSupport extends AbstractVLANSupport {
     }
 
     @Override
-    public boolean allowsMultipleTrafficTypesOverSubnet() throws CloudException, InternalException {
-        return false;
-    }
-
-    @Override
-    public boolean allowsMultipleTrafficTypesOverVlan() throws CloudException, InternalException {
-        return false;
-    }
-
-    @Override
     public void assignRoutingTableToSubnet(@Nonnull String subnetId, @Nonnull String routingTableId) throws CloudException, InternalException {
         throw new OperationNotSupportedException("Routing tables are not supported");
     }
@@ -148,6 +137,18 @@ public class ServerVLANSupport extends AbstractVLANSupport {
     @Override
     public @Nonnull NetworkInterface createNetworkInterface(@Nonnull NICCreateOptions options) throws CloudException, InternalException {
         throw new OperationNotSupportedException("NICs are not supported");
+    }
+
+    @Nonnull
+    @Override
+    public Subnet createSubnet(@Nonnull String cidr, @Nonnull String inProviderVlanId, @Nonnull String name, @Nonnull String description) throws CloudException, InternalException {
+        throw new OperationNotSupportedException("Not supported");
+    }
+
+    @Nonnull
+    @Override
+    public VLAN createVlan(@Nonnull String cidr, @Nonnull String name, @Nonnull String description, @Nonnull String domainName, @Nonnull String[] dnsServers, @Nonnull String[] ntpServers) throws CloudException, InternalException {
+        throw new OperationNotSupportedException("Not supported");
     }
 
     @Override
@@ -229,11 +230,6 @@ public class ServerVLANSupport extends AbstractVLANSupport {
         else {
             throw new InternalException("Vlan id is null/empty!");
         }
-    }
-
-    @Override
-    public boolean isConnectedViaInternetGateway(@Nonnull String vlanId) throws CloudException, InternalException {
-        return true;
     }
 
     @Override

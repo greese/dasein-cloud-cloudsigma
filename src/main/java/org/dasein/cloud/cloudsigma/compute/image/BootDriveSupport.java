@@ -19,9 +19,10 @@
 
 package org.dasein.cloud.cloudsigma.compute.image;
 
-import com.sun.servicetag.SystemEnvironment;
-import org.dasein.cloud.compute.AbstractImageSupport;
-import org.dasein.cloud.compute.ImageFilterOptions;
+import org.dasein.cloud.compute.ComputeServices;
+import org.dasein.cloud.compute.MachineImageSupport;
+import org.dasein.cloud.compute.VirtualMachineSupport;
+import org.dasein.cloud.identity.ServiceAction;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -47,7 +48,6 @@ import org.dasein.cloud.compute.MachineImageState;
 import org.dasein.cloud.compute.MachineImageType;
 import org.dasein.cloud.compute.Platform;
 import org.dasein.cloud.compute.VirtualMachine;
-import org.dasein.cloud.identity.ServiceAction;
 import org.dasein.util.uom.storage.Storage;
 
 import javax.annotation.Nonnull;
@@ -68,14 +68,17 @@ import java.util.Locale;
  * @version 2013.02 initial version
  * @since 2013.02
  */
-public class BootDriveSupport extends AbstractImageSupport {
+public class BootDriveSupport implements MachineImageSupport {
     static private final Logger logger = CloudSigma.getLogger(BootDriveSupport.class);
 
     private CloudSigma provider;
 
     public BootDriveSupport(@Nonnull CloudSigma provider) {
-        super(provider);
         this.provider = provider;
+    }
+
+    private CloudSigma getProvider() {
+        return provider;
     }
 
     public @Nonnull JSONObject cloneDrive(@Nonnull String driveId, @Nonnull String name, Platform os) throws CloudException, InternalException {
@@ -153,6 +156,56 @@ public class BootDriveSupport extends AbstractImageSupport {
     }
 
     @Override
+    public final @Nonnull MachineImage captureImage(@Nonnull ImageCreateOptions options) throws CloudException, InternalException {
+        boolean supported = false;
+
+        for( MachineImageType type : MachineImageType.values() ) {
+            if( supportsImageCapture(type) ) {
+                supported = true;
+            }
+        }
+        if( !supported ) {
+            throw new OperationNotSupportedException("Image capture is not supported in " + getProvider().getCloudName());
+        }
+        return capture(options, null);
+    }
+
+    @Override
+    public final void captureImageAsync(final @Nonnull ImageCreateOptions options, final @Nonnull AsynchronousTask<MachineImage> taskTracker) throws CloudException, InternalException {
+        boolean supported = false;
+
+        for( MachineImageType type : MachineImageType.values() ) {
+            if( supportsImageCapture(type) ) {
+                supported = true;
+            }
+        }
+        if( !supported ) {
+            throw new OperationNotSupportedException("Image capture is not supported in " + getProvider().getCloudName());
+        }
+        getProvider().hold();
+        Thread t = new Thread() {
+            public void run() {
+                try {
+                    MachineImage img = capture(options, taskTracker);
+
+                    if( !taskTracker.isComplete() ) {
+                        taskTracker.completeWithResult(img);
+                    }
+                }
+                catch( Throwable t ) {
+                    taskTracker.complete(t);
+                }
+                finally {
+                    getProvider().release();
+                }
+            }
+        };
+
+        t.setName("Capture of " + options.getVirtualMachineId() + " in " + getProvider().getCloudName());
+        t.setDaemon(true);
+        t.start();
+    }
+
     protected @Nonnull MachineImage capture(@Nonnull ImageCreateOptions options, @Nullable AsynchronousTask<MachineImage> task) throws CloudException, InternalException {
         try {
             if( task != null ) {
@@ -215,6 +268,17 @@ public class BootDriveSupport extends AbstractImageSupport {
     }
 
     @Override
+    public final @Nullable MachineImage getMachineImage(@Nonnull String providerImageId) throws CloudException, InternalException {
+        return getImage(providerImageId);
+    }
+
+    @Nonnull
+    @Override
+    public String getProviderTermForImage(@Nonnull Locale locale) {
+        return getProviderTermForImage(locale, ImageClass.MACHINE);
+    }
+
+    @Override
     public @Nonnull String getProviderTermForImage(@Nonnull Locale locale, @Nonnull ImageClass cls) {
         switch (cls) {
             case KERNEL:
@@ -239,6 +303,47 @@ public class BootDriveSupport extends AbstractImageSupport {
     public @Nonnull Requirement identifyLocalBundlingRequirement() throws CloudException, InternalException {
         return Requirement.NONE;
     }
+
+    @Override
+    public final @Nonnull AsynchronousTask<String> imageVirtualMachine(@Nonnull String vmId, @Nonnull String name, @Nonnull String description) throws CloudException, InternalException {
+        ComputeServices services = getProvider().getComputeServices();
+
+        VirtualMachineSupport support = services.getVirtualMachineSupport();
+
+        if( support == null ) {
+            throw new CloudException("No virtual machine " + vmId + " exists to image in this cloud");
+        }
+        VirtualMachine vm = support.getVirtualMachine(vmId);
+
+        if( vm == null ) {
+            throw new CloudException("No virtual machine " + vmId + " exists to image in this cloud");
+        }
+
+        final ImageCreateOptions options = ImageCreateOptions.getInstance(vm, name, description);
+        final AsynchronousTask<String> task = new AsynchronousTask<String>();
+
+        getProvider().hold();
+        Thread t = new Thread() {
+            public void run() {
+                try {
+                    task.completeWithResult(capture(options, null).getProviderMachineImageId());
+                }
+                catch( Throwable t ) {
+                    task.complete(t);
+                }
+                finally {
+                    getProvider().release();
+                }
+            }
+        };
+
+        t.setName("Capture Image from " + vm.getProviderVirtualMachineId() + " in " + getProvider().getCloudName());
+        t.setDaemon(true);
+        t.start();
+
+        return task;
+    }
+
 
     @Override
     public boolean isImageSharedWithPublic(@Nonnull String machineImageId) throws CloudException, InternalException {
@@ -334,6 +439,91 @@ public class BootDriveSupport extends AbstractImageSupport {
         return list;
     }
 
+    @Nonnull
+    @Override
+    public Iterable<MachineImage> listImages(@Nonnull ImageClass cls) throws CloudException, InternalException {
+        //noinspection ConstantConditions
+        return listImages(cls, getProvider().getContext().getAccountNumber());
+    }
+
+    @Nonnull
+    @Override
+    public Iterable<MachineImage> listImages(@Nonnull ImageClass cls, @Nonnull String ownedBy) throws CloudException, InternalException {
+        if( !ImageClass.MACHINE.equals(cls) ) {
+            return Collections.emptyList();
+        }
+        ArrayList<MachineImage> matches = new ArrayList<MachineImage>();
+        CloudSigmaMethod method = new CloudSigmaMethod(provider);
+
+        boolean moreData = true;
+        String baseTarget = "/drives/detail/";
+        String target = "";
+
+        while(moreData)  {
+            //dmayne 20130218: JSON Parsing
+            logger.debug("Target "+target);
+            target = baseTarget+target;
+            logger.debug("final target "+target);
+
+            JSONObject jObject = method.list(target);
+
+            try {
+                if (jObject == null) {
+                    throw new CloudException("Could not identify drive endpoint for CloudSigma");
+                }
+                if (jObject.has("objects")){
+                    JSONArray objects = jObject.getJSONArray("objects");
+                    for (int i = 0; i < objects.length(); i++) {
+                        JSONObject jImage = objects.getJSONObject(i);
+                        String id = null;
+                        if (jImage.has("owner")) {
+                            JSONObject owner = jImage.getJSONObject("owner");
+                            if (owner != null && owner.has("uuid")){
+                                id = owner.getString("uuid");
+                            }
+                        }
+
+                        if (id != null && id.trim().equals("")) {
+                            id = null;
+                        }
+                        if (ownedBy.equals(id)) {
+                            MachineImage img = toMachineImage(jImage);
+
+                            if( img != null ) {
+                                matches.add(img);
+                            }
+                        }
+                    }
+                }
+
+                //dmayne 20130314: check if there are more pages
+                if (jObject.has("meta")) {
+                    logger.debug("Found meta tag");
+                    JSONObject meta = jObject.getJSONObject("meta");
+
+                    logger.debug("Number of objects "+matches.size()+" out of "+meta.getString("total_count"));
+
+                    if (meta.has("next") && !(meta.isNull("next")) && !meta.getString("next").equals("")) {
+                        logger.debug("Found new page "+meta.getString("next"));
+                        target = meta.getString("next");
+                        logger.debug("target "+target);
+                        target = target.substring(target.indexOf("?"));
+                        logger.debug("new target "+target);
+                        moreData = true;
+                    }
+                    else  {
+                        moreData = false;
+                    }
+                }
+            }
+            catch (JSONException e) {
+                throw new InternalException(e);
+            }
+        }
+        return matches;
+    }
+
+    /*
     @Override
     public @Nonnull Iterable<MachineImage> listImages(@Nullable ImageFilterOptions options) throws CloudException, InternalException {
         if( options != null && !ImageClass.MACHINE.equals(options.getImageClass()) ) {
@@ -410,6 +600,7 @@ public class BootDriveSupport extends AbstractImageSupport {
         }
         return matches;
     }
+    */
 
     private @Nonnull Iterable<MachineImage> listImagesComplete(@Nullable String accountId) throws CloudException, InternalException {
         ProviderContext ctx = provider.getContext();
@@ -470,6 +661,27 @@ public class BootDriveSupport extends AbstractImageSupport {
 
     @Override
     public @Nonnull Iterable<MachineImageFormat> listSupportedFormatsForBundling() throws CloudException, InternalException {
+        return Collections.emptyList();
+    }
+
+    @Override
+    public @Nonnull Iterable<MachineImage> listMachineImages() throws CloudException, InternalException {
+        return listImages(ImageClass.MACHINE);
+    }
+
+    @Override
+    public @Nonnull Iterable<MachineImage> listMachineImagesOwnedBy(@Nullable String accountId) throws CloudException, InternalException {
+        if( accountId == null ) {
+            return listImages(ImageClass.MACHINE);
+        }
+        else {
+            return listImages(ImageClass.MACHINE, accountId);
+        }
+    }
+
+    @Nonnull
+    @Override
+    public Iterable<String> listShares(@Nonnull String providerImageId) throws CloudException, InternalException {
         return Collections.emptyList();
     }
 
@@ -545,6 +757,21 @@ public class BootDriveSupport extends AbstractImageSupport {
     }
 
     @Override
+    public void removeAllImageShares(@Nonnull String providerImageId) throws CloudException, InternalException {
+        // NO-OP
+    }
+
+    @Override
+    public void removeImageShare(@Nonnull String providerImageId, @Nonnull String accountNumber) throws CloudException, InternalException {
+        throw new OperationNotSupportedException("Image sharing is not currently implemented");
+    }
+
+    @Override
+    public void removePublicShare(@Nonnull String providerImageId) throws CloudException, InternalException {
+        throw new OperationNotSupportedException("Image sharing is not currently supported");
+    }
+
+    @Override
     @Deprecated
     public @Nonnull Iterable<MachineImage> searchMachineImages(@Nullable String keyword, @Nullable Platform platform, @Nullable Architecture architecture) throws CloudException, InternalException {
         ArrayList<MachineImage> list = new ArrayList<MachineImage>();
@@ -587,6 +814,99 @@ public class BootDriveSupport extends AbstractImageSupport {
         return list;
     }
 
+    @Nonnull
+    @Override
+    public Iterable<MachineImage> searchPublicImages(@Nullable String keyword, @Nullable Platform platform, @Nullable Architecture architecture, @Nullable ImageClass... imageClasses) throws CloudException, InternalException {
+        if( imageClasses != null && imageClasses.length < 1 ) {
+            boolean ok = false;
+
+            for( ImageClass c : imageClasses ) {
+                if( ImageClass.MACHINE.equals(c) ) {
+                    ok = true;
+                    break;
+                }
+            }
+            if( !ok ) {
+                return Collections.emptyList();
+            }
+        }
+        ArrayList<MachineImage> matches = new ArrayList<MachineImage>();
+        CloudSigmaMethod method = new CloudSigmaMethod(provider);
+
+        boolean moreData = true;
+        String baseTarget = "/drives/detail/";
+        String target = "";
+
+        while(moreData)  {
+            //dmayne 20130218: JSON Parsing
+            logger.debug("Target "+target);
+            target = baseTarget+target;
+            logger.debug("final target "+target);
+
+            JSONObject jObject = method.list(target);
+
+            try {
+                if (jObject == null) {
+                    throw new CloudException("Could not identify drive endpoint for CloudSigma");
+                }
+                if (jObject.has("objects")){
+                    JSONArray objects = jObject.getJSONArray("objects");
+                    for (int i = 0; i < objects.length(); i++) {
+                        JSONObject jImage = objects.getJSONObject(i);
+                        String id = null;
+                        if (jImage.has("owner")) {
+                            JSONObject owner = jImage.getJSONObject("owner");
+                            if (owner != null && owner.has("uuid")){
+                                id = owner.getString("uuid");
+                            }
+                        }
+                        if (id != null && id.trim().equals("")) {
+                            id = null;
+                        }
+                        if( id == null || id.equals("00000000-0000-0000-0000-000000000001") ) {
+                            MachineImage img = toMachineImage(jImage);
+
+                            if( img != null && matches(img, keyword, platform, architecture, imageClasses) ) {
+                                matches.add(img);
+                            }
+                        }
+                    }
+                }
+
+                //dmayne 20130314: check if there are more pages
+                if (jObject.has("meta")) {
+                    logger.debug("Found meta tag");
+                    JSONObject meta = jObject.getJSONObject("meta");
+
+                    logger.debug("Number of objects "+matches.size()+" out of "+meta.getString("total_count"));
+
+                    if (meta.has("next") && !(meta.isNull("next")) && !meta.getString("next").equals("")) {
+                        logger.debug("Found new page "+meta.getString("next"));
+                        target = meta.getString("next");
+                        logger.debug("target "+target);
+                        target = target.substring(target.indexOf("?"));
+                        logger.debug("new target "+target);
+                        moreData = true;
+                    }
+                    else  {
+                        moreData = false;
+                    }
+                }
+            }
+            catch (JSONException e) {
+                throw new InternalException(e);
+            }
+        }
+
+        return matches;
+    }
+
+    @Override
+    public void shareMachineImage(@Nonnull String providerImageId, @Nullable String withAccountId, boolean allow) throws CloudException, InternalException {
+        throw new OperationNotSupportedException("No supported");
+    }
+
+    /*
     @Override
     public @Nonnull Iterable<MachineImage> searchPublicImages(@Nonnull ImageFilterOptions options) throws InternalException, CloudException {
         if( !ImageClass.MACHINE.equals(options.getImageClass()) ) {
@@ -662,6 +982,7 @@ public class BootDriveSupport extends AbstractImageSupport {
 
         return matches;
     }
+    */
 
     @Override
     public boolean supportsCustomImages() {
@@ -691,6 +1012,11 @@ public class BootDriveSupport extends AbstractImageSupport {
     @Override
     public boolean supportsPublicLibrary(@Nonnull ImageClass cls) throws CloudException, InternalException {
         return true;
+    }
+
+    @Override
+    public void updateTags(@Nonnull String imageId, @Nonnull Tag... tags) throws CloudException, InternalException {
+        // NO-OP
     }
 
     private @Nullable MachineImage toMachineImage(@Nullable JSONObject drive) throws CloudException, InternalException {
@@ -948,5 +1274,65 @@ public class BootDriveSupport extends AbstractImageSupport {
             logger.error("UTF-8 not supported: " + e.getMessage());
             throw new InternalException(e);
         }
+    }
+
+    protected boolean matches(@Nonnull MachineImage image, @Nullable String keyword, @Nullable Platform platform, @Nullable Architecture architecture, @Nullable ImageClass ... classes) {
+        if( architecture != null && !architecture.equals(image.getArchitecture()) ) {
+            return false;
+        }
+        if( classes != null && classes.length > 0 ) {
+            boolean matches = false;
+
+            for( ImageClass cls : classes ) {
+                if( cls.equals(image.getImageClass()) ) {
+                    matches = true;
+                    break;
+                }
+            }
+            if( !matches ) {
+                return false;
+            }
+        }
+        if( platform != null && !platform.equals(Platform.UNKNOWN) ) {
+            Platform mine = image.getPlatform();
+
+            if( platform.isWindows() && !mine.isWindows() ) {
+                return false;
+            }
+            if( platform.isUnix() && !mine.isUnix() ) {
+                return false;
+            }
+            if( platform.isBsd() && !mine.isBsd() ) {
+                return false;
+            }
+            if( platform.isLinux() && !mine.isLinux() ) {
+                return false;
+            }
+            if( platform.equals(Platform.UNIX) ) {
+                if( !mine.isUnix() ) {
+                    return false;
+                }
+            }
+            else if( !platform.equals(mine) ) {
+                return false;
+            }
+        }
+        if( keyword != null ) {
+            keyword = keyword.toLowerCase();
+            if( !image.getDescription().toLowerCase().contains(keyword) ) {
+                if( !image.getName().toLowerCase().contains(keyword) ) {
+                    if( !image.getProviderMachineImageId().toLowerCase().contains(keyword) ) {
+                        return false;
+                    }
+                }
+            }
+        }
+        return true;
+    }
+
+    @Nonnull
+    @Override
+    public String[] mapServiceAction(@Nonnull ServiceAction action) {
+        return new String[0];  //To change body of implemented methods use File | Settings | File Templates.
     }
 }

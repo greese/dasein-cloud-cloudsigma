@@ -41,8 +41,7 @@ public class CloudSigmaComputeServices extends AbstractComputeServices {
     public CloudSigmaComputeServices(@Nonnull CloudSigma provider) { this.provider = provider; }
 
     @Override
-    public @Nonnull
-    BootDriveSupport getImageSupport() {
+    public @Nonnull  BootDriveSupport getImageSupport() {
         return new BootDriveSupport(provider);
     }
 

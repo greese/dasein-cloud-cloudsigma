@@ -20,7 +20,17 @@
 package org.dasein.cloud.cloudsigma.compute.block;
 
 import org.dasein.cloud.OperationNotSupportedException;
-import org.dasein.cloud.Tag;
+import org.dasein.cloud.compute.Platform;
+import org.dasein.cloud.compute.VirtualMachine;
+import org.dasein.cloud.compute.VmState;
+import org.dasein.cloud.compute.Volume;
+import org.dasein.cloud.compute.VolumeCreateOptions;
+import org.dasein.cloud.compute.VolumeFormat;
+import org.dasein.cloud.compute.VolumeProduct;
+import org.dasein.cloud.compute.VolumeState;
+import org.dasein.cloud.compute.VolumeSupport;
+import org.dasein.cloud.compute.VolumeType;
+import org.dasein.cloud.identity.ServiceAction;
 import org.dasein.util.CalendarWrapper;
 import org.json.JSONArray;
 import org.json.JSONException;
@@ -35,15 +45,18 @@ import org.dasein.cloud.cloudsigma.CloudSigma;
 import org.dasein.cloud.cloudsigma.CloudSigmaConfigurationException;
 import org.dasein.cloud.cloudsigma.CloudSigmaMethod;
 import org.dasein.cloud.cloudsigma.NoContextException;
-import org.dasein.cloud.compute.*;
-import org.dasein.cloud.identity.ServiceAction;
 import org.dasein.util.uom.storage.*;
 
+import javax.annotation.Nonnegative;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import java.io.UnsupportedEncodingException;
 import java.net.URLEncoder;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.Date;
+import java.util.Locale;
 
 /**
  * Implements support for block storage devices that may be attached to virtual machines in CloudSigma.
@@ -53,13 +66,12 @@ import java.util.*;
  * @version 2013.02 initial version
  * @since 2013.02
  */
-public class DataDriveSupport extends AbstractVolumeSupport {
+public class DataDriveSupport implements VolumeSupport {
     static private final Logger logger = CloudSigma.getLogger(DataDriveSupport.class);
 
     private CloudSigma provider;
 
     public DataDriveSupport(@Nonnull CloudSigma provider) {
-        super(provider);
         this.provider = provider;
     }
 
@@ -72,6 +84,89 @@ public class DataDriveSupport extends AbstractVolumeSupport {
         }
         provider.getComputeServices().getVirtualMachineSupport().attach(v, toServer, deviceId);
     }
+
+    @Override
+    public final @Nonnull String create(@Nullable String fromSnapshot, @Nonnegative int sizeInGb, @Nonnull String inZone) throws InternalException, CloudException {
+        Storage<Gigabyte> storage = new Storage<Gigabyte>(sizeInGb, Storage.GIGABYTE);
+
+        if( getVolumeProductRequirement().equals(Requirement.REQUIRED) ) {
+            VolumeProduct lastChance = null;
+            VolumeProduct closest = null;
+
+            for( VolumeProduct product : listVolumeProducts() ) {
+                if( lastChance == null ) {
+                    lastChance = product;
+                }
+                else {
+                    Float l = lastChance.getMonthlyGigabyteCost();
+                    Float t = product.getMonthlyGigabyteCost();
+
+                    if( l != null && t != null && t < l ) {
+                        lastChance = product;
+                    }
+                }
+                if( isVolumeSizeDeterminedByProduct() ) {
+                    Storage<Gigabyte> size = product.getVolumeSize();
+                    int sz = (size == null ? 0 : size.intValue());
+
+                    if( sz >= sizeInGb ) {
+                        if( closest == null ) {
+                            closest = product;
+                        }
+                        else {
+                            size = closest.getVolumeSize();
+                            if( size == null || size.intValue() > sz ) {
+                                closest = product;
+                            }
+                        }
+                    }
+                }
+                else {
+                    if( closest == null ) {
+                        closest = product;
+                    }
+                    else {
+                        Float c = closest.getMonthlyGigabyteCost();
+                        Float t = product.getMonthlyGigabyteCost();
+
+                        if( c != null && t != null && t < c ) {
+                            closest = product;
+                        }
+                    }
+                }
+            }
+            if( closest == null ) {
+                closest = lastChance;
+            }
+            if( closest != null ) {
+                if( fromSnapshot != null ) {
+                    String name = "Volume from Snapshot " + fromSnapshot;
+                    String description = "Volume created from snapshot #" + fromSnapshot + " on " + (new Date());
+
+                    return createVolume(VolumeCreateOptions.getInstanceForSnapshot(closest.getProviderProductId(), fromSnapshot, storage, name, description, 0));
+                }
+                else {
+                    String name = "New Volume " + System.currentTimeMillis();
+                    String description = "New Volume (created " + (new Date()) + ")";
+
+                    return createVolume(VolumeCreateOptions.getInstance(closest.getProviderProductId(), storage, name, description, 0));
+                }
+            }
+        }
+        if( fromSnapshot != null ) {
+            String name = "Volume from Snapshot " + fromSnapshot;
+            String description = "Volume created from snapshot #" + fromSnapshot + " on " + (new Date());
+
+            return createVolume(VolumeCreateOptions.getInstanceForSnapshot(fromSnapshot, storage, name, description));
+        }
+        else {
+            String name = "New Volume " + System.currentTimeMillis();
+            String description = "New Volume (created " + (new Date()) + ")";
+
+            return createVolume(VolumeCreateOptions.getInstance(storage, name, description));
+        }
+    }
+
 
     @Override
     public @Nonnull String createVolume(@Nonnull VolumeCreateOptions options) throws InternalException, CloudException {
@@ -112,6 +207,11 @@ public class DataDriveSupport extends AbstractVolumeSupport {
         catch (JSONException e) {
             throw new InternalException(e);
         }
+    }
+
+    @Override
+    public final void detach(@Nonnull String volumeId) throws InternalException, CloudException {
+        detach(volumeId, false);
     }
 
     @Override
@@ -396,7 +496,7 @@ public class DataDriveSupport extends AbstractVolumeSupport {
                     String host = server.getString("uuid");
                     if (host != null && !host.equals("")) {
                         VirtualMachine vm = provider.getComputeServices().getVirtualMachineSupport().getVirtualMachine(host);
-                        String deviceId = null;
+                        String deviceId;
                         if (vm != null && !found) {
                             //dmayne 20130314: set server to first found in case none of them are running
                             found = true;
@@ -592,5 +692,11 @@ public class DataDriveSupport extends AbstractVolumeSupport {
             logger.error("UTF-8 not supported: " + e.getMessage());
             throw new InternalException(e);
         }
+    }
+
+    @Nonnull
+    @Override
+    public String[] mapServiceAction(@Nonnull ServiceAction action) {
+        return new String[0];  //To change body of implemented methods use File | Settings | File Templates.
     }
 }
