@@ -474,7 +474,7 @@ public class ServerSupport extends AbstractVMSupport {
         product.setRamSize(new Storage<Megabyte>(ramInMb, Storage.MEGABYTE));
         product.setCpuCount(cpuCount);
         product.setDescription(product.getName());
-        product.setRootVolumeSize(new Storage<Gigabyte>(0, Storage.GIGABYTE));
+        product.setRootVolumeSize(new Storage<Gigabyte>(10, Storage.GIGABYTE));
         return product;
     }
 
@@ -638,11 +638,9 @@ public class ServerSupport extends AbstractVMSupport {
                     } catch (Throwable ignore) {
                     }
                     if (actualDrive == null) {
-                        System.out.println("No drive for " + driveId);
                         throw new CloudException("Cloned drive has disappeared");
                     }
                     status = actualDrive.getString("status");
-                    System.out.println(driveId + "=" + status);
                 }
 
                 JSONObject newServer = new JSONObject(), newDrive = new JSONObject(), newNic = new JSONObject(), newVlan = new JSONObject();
@@ -1059,10 +1057,11 @@ public class ServerSupport extends AbstractVMSupport {
 
     @Override
     public void start(@Nonnull String vmId) throws InternalException, CloudException {
+        System.out.println("Starting: " + vmId);
         CloudSigmaMethod method = new CloudSigmaMethod(provider);
-        logger.debug("Starting vm " + vmId);
 
         method.postString(toServerURL(vmId, "action/?do=start"), "");
+        System.out.println("Success");
     }
 
     @Override
@@ -1123,11 +1122,29 @@ public class ServerSupport extends AbstractVMSupport {
         if (vm == null) {
             throw new CloudException("No such virtual machine: " + vmId);
         }
+        if( !vm.getCurrentState().equals(VmState.STOPPED) ) {
+            try { stop(vmId, true); }
+            catch( Exception ignore ) { }
+        }
+        long timeout = System.currentTimeMillis() + (CalendarWrapper.MINUTE* 5L);
+
+        while( timeout > System.currentTimeMillis() ) {
+            if( vm == null ) {
+                return;
+            }
+            if( vm.getCurrentState().equals(VmState.STOPPED) ) {
+                break;
+            }
+            try { Thread.sleep(15000L); }
+            catch( InterruptedException ignore ) { }
+            try { vm = getVirtualMachine(vmId); }
+            catch( Throwable ignore ) { }
+        }
         CloudSigmaMethod method = new CloudSigmaMethod(provider);
 
         method.deleteString(toServerURL(vmId, ""), "");
 
-        long timeout = System.currentTimeMillis() + (CalendarWrapper.MINUTE * 10L);
+        timeout = System.currentTimeMillis() + (CalendarWrapper.MINUTE * 5L);
 
         try {
             vm = getVirtualMachine(vmId);
