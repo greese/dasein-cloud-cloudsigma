@@ -1050,9 +1050,14 @@ public class ServerSupport extends AbstractVMSupport {
                 JSONObject nic = (JSONObject) nics.get(i);
                 if (address.getVersion().equals(IPVersion.IPV4)) {
                     JSONObject nicObj = nic.getJSONObject("ip_v4_conf");
-                    JSONObject ip = nicObj.getJSONObject("ip");
-                    if (!ip.getString("uuid").equals(address.getProviderIpAddressId())) {
-                        newArray.put(nics.getJSONObject(i));
+                    if (nicObj.isNull("ip") && nicObj.getString("conf").equalsIgnoreCase("dhcp")) {
+                         newArray.put(nics.getJSONObject(i));
+                    }
+                    else if (!nicObj.isNull("ip")) {
+                        JSONObject ip = nicObj.getJSONObject("ip");
+                        if (!ip.getString("uuid").equals(address.getProviderIpAddressId())) {
+                            newArray.put(nics.getJSONObject(i));
+                        }
                     }
                 }
             }
@@ -1275,31 +1280,31 @@ public class ServerSupport extends AbstractVMSupport {
         }
 
         try {
-        String id = object.getString("uuid");
-        if (id == null || id.equals("")) {
-            return null;
-        }
-
-        VmState state = VmState.PENDING;
-
-        String status = object.getString("status");
-        if (status != null) {
-            if (status.equalsIgnoreCase("stopped")) {
-                state = VmState.STOPPED;
-            } else if (status.equalsIgnoreCase("stopping")) {
-                state = VmState.STOPPING;
-            } else if (status.equalsIgnoreCase("started") || status.equalsIgnoreCase("running")) {
-                state = VmState.RUNNING;
-            } else if (status.equalsIgnoreCase("paused")) {
-                state = VmState.PAUSED;
-            } else if (status.equalsIgnoreCase("dead") || status.equalsIgnoreCase("dumped") || status.equalsIgnoreCase("unavailable")) {
-                state = VmState.TERMINATED;
-            } else if (status.startsWith("imaging")) {
-                state = VmState.PENDING;
-            } else {
-                logger.warn("DEBUG: Unknown CloudSigma server status: " + status);
+            String id = object.getString("uuid");
+            if (id == null || id.equals("")) {
+                return null;
             }
-        }
+    
+            VmState state = VmState.PENDING;
+    
+            String status = object.getString("status");
+            if (status != null) {
+                if (status.equalsIgnoreCase("stopped")) {
+                    state = VmState.STOPPED;
+                } else if (status.equalsIgnoreCase("stopping")) {
+                    state = VmState.STOPPING;
+                } else if (status.equalsIgnoreCase("started") || status.equalsIgnoreCase("running")) {
+                    state = VmState.RUNNING;
+                } else if (status.equalsIgnoreCase("paused")) {
+                    state = VmState.PAUSED;
+                } else if (status.equalsIgnoreCase("dead") || status.equalsIgnoreCase("dumped") || status.equalsIgnoreCase("unavailable")) {
+                    state = VmState.TERMINATED;
+                } else if (status.startsWith("imaging")) {
+                    state = VmState.PENDING;
+                } else {
+                    logger.warn("DEBUG: Unknown CloudSigma server status: " + status);
+                }
+            }
         return new ResourceStatus(id, state);
         }
         catch (JSONException e) {
