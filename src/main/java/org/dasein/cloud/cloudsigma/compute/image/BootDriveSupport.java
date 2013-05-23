@@ -397,17 +397,23 @@ public class BootDriveSupport implements MachineImageSupport {
                 JSONArray objects = jObject.getJSONArray("objects");
                 for (int i = 0; i < objects.length(); i++) {
                     JSONObject jImage = objects.getJSONObject(i);
-                    JSONObject owner = jImage.getJSONObject("owner");
-                    String id = owner.getString("uuid");
 
-                    if (id != null && id.trim().equals("")) {
-                        id = null;
-                    }
-                    if (me.equals(id)) {
-                        ResourceStatus img = toStatus(jImage);
+                    //dmayne 20130522: check that we are looking at an image
+                    //(will have an image_type attribute)
+                    JSONObject metadata = jImage.getJSONObject("meta");
+                    if (metadata.has("image_type")) {
+                        JSONObject owner = jImage.getJSONObject("owner");
+                        String id = owner.getString("uuid");
 
-                        if (img != null) {
-                            list.add(img);
+                        if (id != null && id.trim().equals("")) {
+                            id = null;
+                        }
+                        if (me.equals(id)) {
+                            ResourceStatus img = toStatus(jImage);
+
+                            if (img != null) {
+                                list.add(img);
+                            }
                         }
                     }
                 }
@@ -475,22 +481,27 @@ public class BootDriveSupport implements MachineImageSupport {
                     JSONArray objects = jObject.getJSONArray("objects");
                     for (int i = 0; i < objects.length(); i++) {
                         JSONObject jImage = objects.getJSONObject(i);
-                        String id = null;
-                        if (jImage.has("owner")) {
-                            JSONObject owner = jImage.getJSONObject("owner");
-                            if (owner != null && owner.has("uuid")){
-                                id = owner.getString("uuid");
+                        //dmayne 20130522: check that we are looking at an image
+                        //(will have an image_type attribute)
+                        JSONObject metadata = jImage.getJSONObject("meta");
+                        if (metadata.has("image_type")) {
+                            String id = null;
+                            if (jImage.has("owner")) {
+                                JSONObject owner = jImage.getJSONObject("owner");
+                                if (owner != null && owner.has("uuid")){
+                                    id = owner.getString("uuid");
+                                }
                             }
-                        }
 
-                        if (id != null && id.trim().equals("")) {
-                            id = null;
-                        }
-                        if (ownedBy.equals(id)) {
-                            MachineImage img = toMachineImage(jImage);
+                            if (id != null && id.trim().equals("")) {
+                                id = null;
+                            }
+                            if (ownedBy.equals(id)) {
+                                MachineImage img = toMachineImage(jImage);
 
-                            if( img != null ) {
-                                matches.add(img);
+                                if( img != null ) {
+                                    matches.add(img);
+                                }
                             }
                         }
                     }
@@ -553,22 +564,27 @@ public class BootDriveSupport implements MachineImageSupport {
                     JSONArray objects = jObject.getJSONArray("objects");
                     for (int i = 0; i < objects.length(); i++) {
                         JSONObject jImage = objects.getJSONObject(i);
-                        String id = null;
-                        if (jImage.has("owner")) {
-                            JSONObject owner = jImage.getJSONObject("owner");
-                            if (owner != null && owner.has("uuid")){
-                                id = owner.getString("uuid");
+                        //dmayne 20130522: check that we are looking at an image
+                        //(will have an image_type attribute)
+                        JSONObject metadata = jImage.getJSONObject("meta");
+                        if (metadata.has("image_type")) {
+                            String id = null;
+                            if (jImage.has("owner")) {
+                                JSONObject owner = jImage.getJSONObject("owner");
+                                if (owner != null && owner.has("uuid")){
+                                    id = owner.getString("uuid");
+                                }
                             }
-                        }
 
-                        if (id != null && id.trim().equals("")) {
-                            id = null;
-                        }
-                        if (me.equals(id)) {
-                            MachineImage img = toMachineImage(jImage);
+                            if (id != null && id.trim().equals("")) {
+                                id = null;
+                            }
+                            if (me.equals(id)) {
+                                MachineImage img = toMachineImage(jImage);
 
-                            if( img != null && (options == null || options.matches(img)) ) {
-                                matches.add(img);
+                                if( img != null && (options == null || options.matches(img)) ) {
+                                    matches.add(img);
+                                }
                             }
                         }
                     }
@@ -853,21 +869,26 @@ public class BootDriveSupport implements MachineImageSupport {
                     JSONArray objects = jObject.getJSONArray("objects");
                     for (int i = 0; i < objects.length(); i++) {
                         JSONObject jImage = objects.getJSONObject(i);
-                        String id = null;
-                        if (jImage.has("owner")) {
-                            JSONObject owner = jImage.getJSONObject("owner");
-                            if (owner != null && owner.has("uuid")){
-                                id = owner.getString("uuid");
+                        //dmayne 20130522: check that we are looking at an image
+                        //(will have an image_type attribute)
+                        JSONObject metadata = jImage.getJSONObject("meta");
+                        if (metadata.has("image_type")) {
+                            String id = null;
+                            if (jImage.has("owner")) {
+                                JSONObject owner = jImage.getJSONObject("owner");
+                                if (owner != null && owner.has("uuid")){
+                                    id = owner.getString("uuid");
+                                }
                             }
-                        }
-                        if (id != null && id.trim().equals("")) {
-                            id = null;
-                        }
-                        if( id == null || id.equals("00000000-0000-0000-0000-000000000001") ) {
-                            MachineImage img = toMachineImage(jImage);
+                            if (id != null && id.trim().equals("")) {
+                                id = null;
+                            }
+                            if( id == null || id.equals("00000000-0000-0000-0000-000000000001") ) {
+                                MachineImage img = toMachineImage(jImage);
 
-                            if( img != null && matches(img, keyword, platform, architecture, imageClasses) ) {
-                                matches.add(img);
+                                if( img != null && matches(img, keyword, platform, architecture, imageClasses) ) {
+                                    matches.add(img);
+                                }
                             }
                         }
                     }
@@ -935,21 +956,26 @@ public class BootDriveSupport implements MachineImageSupport {
                     JSONArray objects = jObject.getJSONArray("objects");
                     for (int i = 0; i < objects.length(); i++) {
                         JSONObject jImage = objects.getJSONObject(i);
-                        String id = null;
-                        if (jImage.has("owner")) {
-                            JSONObject owner = jImage.getJSONObject("owner");
-                            if (owner != null && owner.has("uuid")){
-                                id = owner.getString("uuid");
+                        //dmayne 20130522: check that we are looking at an image
+                        //(will have an image_type attribute)
+                        JSONObject metadata = jImage.getJSONObject("meta");
+                        if (metadata.has("image_type")) {
+                            String id = null;
+                            if (jImage.has("owner")) {
+                                JSONObject owner = jImage.getJSONObject("owner");
+                                if (owner != null && owner.has("uuid")){
+                                    id = owner.getString("uuid");
+                                }
                             }
-                        }
-                        if (id != null && id.trim().equals("")) {
-                            id = null;
-                        }
-                        if( id == null || id.equals("00000000-0000-0000-0000-000000000001") ) {
-                            MachineImage img = toMachineImage(jImage);
+                            if (id != null && id.trim().equals("")) {
+                                id = null;
+                            }
+                            if( id == null || id.equals("00000000-0000-0000-0000-000000000001") ) {
+                                MachineImage img = toMachineImage(jImage);
 
-                            if( img != null && options.matches(img) ) {
-                                matches.add(img);
+                                if( img != null && options.matches(img) ) {
+                                    matches.add(img);
+                                }
                             }
                         }
                     }
