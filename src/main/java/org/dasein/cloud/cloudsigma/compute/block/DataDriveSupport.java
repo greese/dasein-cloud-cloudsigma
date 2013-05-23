@@ -233,14 +233,14 @@ public class DataDriveSupport extends AbstractVolumeSupport {
                     for (int i = 0; i < objects.length(); i++) {
                         JSONObject jVolume = objects.getJSONObject(i);
                         //dmayne 20130522: check that we are looking at a volume
-+                        //(will not have an image_type attribute)
-+                        JSONObject metadata = jVolume.getJSONObject("meta");
-+                        if (!metadata.has("image_type")) {
-+                            ResourceStatus volume = toStatus(jVolume);
-+
-+                            if (volume != null) {
-+                                list.add(volume);
-+                            }
+                        //(will not have an image_type attribute)
+                        JSONObject metadata = jVolume.getJSONObject("meta");
+                        if (!metadata.has("image_type")) {
+                            ResourceStatus volume = toStatus(jVolume);
+
+                            if (volume != null) {
+                                list.add(volume);
+                            }
                          }
                     }
                 }
@@ -300,14 +300,14 @@ public class DataDriveSupport extends AbstractVolumeSupport {
                     for (int i = 0; i < objects.length(); i++) {
                         JSONObject jVolume = objects.getJSONObject(i);
                         //dmayne 20130522: check that we are looking at a volume
-+                        //(will not have an image_type attribute)
-+                        JSONObject metadata = jVolume.getJSONObject("meta");
-+                        if (!metadata.has("image_type")) {
-+                            Volume volume = toVolume(jVolume);
-+
-+                            if (volume != null) {
-+                                list.add(volume);
-+                            }
+                        //(will not have an image_type attribute)
+                        JSONObject metadata = jVolume.getJSONObject("meta");
+                        if (!metadata.has("image_type")) {
+                            Volume volume = toVolume(jVolume);
+
+                            if (volume != null) {
+                                list.add(volume);
+                            }
                          }
                     }
                 }
