@@ -77,6 +77,7 @@ public class DataDriveSupport implements VolumeSupport {
 
     @Override
     public void attach(@Nonnull String volumeId, @Nonnull String toServer, @Nonnull String deviceId) throws InternalException, CloudException {
+        logger.debug("device: "+deviceId);
         Volume v = getVolume(volumeId);
 
         if (v == null) {
@@ -283,7 +284,7 @@ public class DataDriveSupport implements VolumeSupport {
             ArrayList<String> ids = new ArrayList<String>();
 
             for (int i = 0; i <= 9; i++) {
-                for (int j = 0; j <= 9; j++) {
+                for (int j = 0; j <= 3; j++) {
                     ids.add(String.valueOf(i).concat(":").concat(String.valueOf(j)));
                 }
             }
