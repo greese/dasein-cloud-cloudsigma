@@ -156,17 +156,17 @@ public class ServerSupport implements VirtualMachineSupport {
             newDrive.put("device", "virtio");
             // deviceId is always not null here
             //if (deviceId != null) {
-                newDrive.put("dev_channel", deviceId);
+            newDrive.put("dev_channel", deviceId);
             //}
             //else {
-              //  if (drives.length() < 10) {
-                //    newDrive.put("dev_channel", "0:"+drives.length());
-                //} else if (drives.length() < 100) {
-                  //  newDrive.put("dev_channel", (drives.length()/10)+":"+(drives.length()%10));
-                //}
-                //else {
-                  //  throw new CloudException("Maximum drives attached to server "+vm.getProviderVirtualMachineId());
-                //}
+            //  if (drives.length() < 10) {
+            //    newDrive.put("dev_channel", "0:"+drives.length());
+            //} else if (drives.length() < 100) {
+            //  newDrive.put("dev_channel", (drives.length()/10)+":"+(drives.length()%10));
+            //}
+            //else {
+            //  throw new CloudException("Maximum drives attached to server "+vm.getProviderVirtualMachineId());
+            //}
             //}
             newDrive.put("drive", volume.getProviderVolumeId());
 
@@ -1124,9 +1124,14 @@ public class ServerSupport implements VirtualMachineSupport {
                 JSONObject nic = (JSONObject) nics.get(i);
                 if (address.getVersion().equals(IPVersion.IPV4)) {
                     JSONObject nicObj = nic.getJSONObject("ip_v4_conf");
-                    JSONObject ip = nicObj.getJSONObject("ip");
-                    if (!ip.getString("uuid").equals(address.getProviderIpAddressId())) {
+                    if (nicObj.isNull("ip") && nicObj.getString("conf").equalsIgnoreCase("dhcp")) {
                         newArray.put(nics.getJSONObject(i));
+                    }
+                    else if (!nicObj.isNull("ip")) {
+                        JSONObject ip = nicObj.getJSONObject("ip");
+                        if (!ip.getString("uuid").equals(address.getProviderIpAddressId())) {
+                            newArray.put(nics.getJSONObject(i));
+                        }
                     }
                 }
             }
@@ -1344,32 +1349,32 @@ public class ServerSupport implements VirtualMachineSupport {
         }
 
         try {
-        String id = object.getString("uuid");
-        if (id == null || id.equals("")) {
-            return null;
-        }
-
-        VmState state = VmState.PENDING;
-
-        String status = object.getString("status");
-        if (status != null) {
-            if (status.equalsIgnoreCase("stopped")) {
-                state = VmState.STOPPED;
-            } else if (status.equalsIgnoreCase("stopping")) {
-                state = VmState.STOPPING;
-            } else if (status.equalsIgnoreCase("started") || status.equalsIgnoreCase("running")) {
-                state = VmState.RUNNING;
-            } else if (status.equalsIgnoreCase("paused")) {
-                state = VmState.PAUSED;
-            } else if (status.equalsIgnoreCase("dead") || status.equalsIgnoreCase("dumped") || status.equalsIgnoreCase("unavailable")) {
-                state = VmState.TERMINATED;
-            } else if (status.startsWith("imaging")) {
-                state = VmState.PENDING;
-            } else {
-                logger.warn("DEBUG: Unknown CloudSigma server status: " + status);
+            String id = object.getString("uuid");
+            if (id == null || id.equals("")) {
+                return null;
             }
-        }
-        return new ResourceStatus(id, state);
+
+            VmState state = VmState.PENDING;
+
+            String status = object.getString("status");
+            if (status != null) {
+                if (status.equalsIgnoreCase("stopped")) {
+                    state = VmState.STOPPED;
+                } else if (status.equalsIgnoreCase("stopping")) {
+                    state = VmState.STOPPING;
+                } else if (status.equalsIgnoreCase("started") || status.equalsIgnoreCase("running")) {
+                    state = VmState.RUNNING;
+                } else if (status.equalsIgnoreCase("paused")) {
+                    state = VmState.PAUSED;
+                } else if (status.equalsIgnoreCase("dead") || status.equalsIgnoreCase("dumped") || status.equalsIgnoreCase("unavailable")) {
+                    state = VmState.TERMINATED;
+                } else if (status.startsWith("imaging")) {
+                    state = VmState.PENDING;
+                } else {
+                    logger.warn("DEBUG: Unknown CloudSigma server status: " + status);
+                }
+            }
+            return new ResourceStatus(id, state);
         }
         catch (JSONException e) {
             throw new InternalException(e);
@@ -1424,6 +1429,13 @@ public class ServerSupport implements VirtualMachineSupport {
             }
             if (imageId != null && !imageId.equals("")) {
                 vm.setProviderMachineImageId(imageId);
+
+                //dmayne 20130524: try to get image os
+                logger.debug("Trying to establish the platform for "+imageId);
+                MachineImage image = provider.getComputeServices().getImageSupport().getImage(imageId);
+                Platform os = image.getPlatform();
+                vm.setPlatform(os);
+                logger.debug("Server os is "+vm.getPlatform());
             }
 
             String vlanId = null;
@@ -1513,6 +1525,26 @@ public class ServerSupport implements VirtualMachineSupport {
                                         }
                                     }
                                 }
+                            }
+                        }
+                    }
+
+                    //dmayne 20130524: check for runtime details to get dhcp ip address
+                    logger.debug("Trying to get runtime ip info");
+                    if (jnic.has("runtime") && !jnic.isNull("runtime")) {
+                        JSONObject jRun = jnic.getJSONObject("runtime");
+                        if (jRun.has("ip_v4") && !jRun.isNull("ip_v4")) {
+                            JSONObject ipRun = jRun.getJSONObject("ip_v4");
+                            String ip = ipRun.getString("uuid");
+                            if (ip != null && (!ip.equalsIgnoreCase(""))) {
+                                allIps.add(ip);
+                            }
+                        }
+                        if (jRun.has("ip_v6") && !jRun.isNull("ip_v6")) {
+                            JSONObject ipRun = jRun.getJSONObject("ip_v6");
+                            String ip = ipRun.getString("uuid");
+                            if (ip != null && (!ip.equalsIgnoreCase(""))) {
+                                allIps.add(ip);
                             }
                         }
                     }

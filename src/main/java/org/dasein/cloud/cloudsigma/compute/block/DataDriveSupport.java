@@ -77,6 +77,7 @@ public class DataDriveSupport implements VolumeSupport {
 
     @Override
     public void attach(@Nonnull String volumeId, @Nonnull String toServer, @Nonnull String deviceId) throws InternalException, CloudException {
+        logger.debug("device: "+deviceId);
         Volume v = getVolume(volumeId);
 
         if (v == null) {
@@ -254,11 +255,11 @@ public class DataDriveSupport implements VolumeSupport {
     public Volume getVolume(@Nonnull String volumeId) throws InternalException, CloudException {
         //dmayne 20130218: JSON Parsing
         try {
-        String jDrive = (getDrive(volumeId));
-        if (jDrive != null){
-            return toVolume(new JSONObject(jDrive));
-        }
-        return null;
+            String jDrive = (getDrive(volumeId));
+            if (jDrive != null){
+                return toVolume(new JSONObject(jDrive));
+            }
+            return null;
         }
         catch (JSONException e) {
             throw new InternalException(e);
@@ -283,7 +284,7 @@ public class DataDriveSupport implements VolumeSupport {
             ArrayList<String> ids = new ArrayList<String>();
 
             for (int i = 0; i <= 9; i++) {
-                for (int j = 0; j <= 9; j++) {
+                for (int j = 0; j <= 3; j++) {
                     ids.add(String.valueOf(i).concat(":").concat(String.valueOf(j)));
                 }
             }
@@ -332,10 +333,15 @@ public class DataDriveSupport implements VolumeSupport {
                     JSONArray objects = json.getJSONArray("objects");
                     for (int i = 0; i < objects.length(); i++) {
                         JSONObject jVolume = objects.getJSONObject(i);
-                        ResourceStatus volume = toStatus(jVolume);
+                        //dmayne 20130522: check that we are looking at a volume
+                        //(will not have an image_type attribute)
+                        JSONObject metadata = jVolume.getJSONObject("meta");
+                        if (!metadata.has("image_type")) {
+                            ResourceStatus volume = toStatus(jVolume);
 
-                        if (volume != null) {
-                            list.add(volume);
+                            if (volume != null) {
+                                list.add(volume);
+                            }
                         }
                     }
                 }
@@ -394,10 +400,15 @@ public class DataDriveSupport implements VolumeSupport {
                     JSONArray objects = json.getJSONArray("objects");
                     for (int i = 0; i < objects.length(); i++) {
                         JSONObject jVolume = objects.getJSONObject(i);
-                        Volume volume = toVolume(jVolume);
+                        //dmayne 20130522: check that we are looking at a volume
+                        //(will not have an image_type attribute)
+                        JSONObject metadata = jVolume.getJSONObject("meta");
+                        if (!metadata.has("image_type")) {
+                            Volume volume = toVolume(jVolume);
 
-                        if (volume != null) {
-                            list.add(volume);
+                            if (volume != null) {
+                                list.add(volume);
+                            }
                         }
                     }
                 }
