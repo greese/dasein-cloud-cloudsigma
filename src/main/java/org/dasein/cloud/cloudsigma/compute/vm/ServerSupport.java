@@ -1360,6 +1360,13 @@ public class ServerSupport extends AbstractVMSupport {
             }
             if (imageId != null && !imageId.equals("")) {
                 vm.setProviderMachineImageId(imageId);
+                
+                //dmayne 20130524: try to get image os
+                logger.debug("Trying to establish the platform for "+imageId);
+                MachineImage image = provider.getComputeServices().getImageSupport().getImage(imageId);
+                Platform os = image.getPlatform();
+                vm.setPlatform(os);
+                logger.debug("Server os is "+vm.getPlatform());
             }
 
             String vlanId = null;
@@ -1450,6 +1457,26 @@ public class ServerSupport extends AbstractVMSupport {
                                     }
                                 }
                             }
+                        }
+                    }
+                    
+                    //dmayne 20130524: check for runtime details to get dhcp ip address
+                    logger.debug("Trying to get runtime ip info");
+                    if (jnic.has("runtime") && !jnic.isNull("runtime")) {
+                        JSONObject jRun = jnic.getJSONObject("runtime");
+                        if (jRun.has("ip_v4") && !jRun.isNull("ip_v4")) {
+                            JSONObject ipRun = jRun.getJSONObject("ip_v4");
+                            String ip = ipRun.getString("uuid");
+                            if (ip != null && (!ip.equalsIgnoreCase(""))) {
+                                    allIps.add(ip);
+                                }
+                        }
+                        if (jRun.has("ip_v6") && !jRun.isNull("ip_v6")) {
+                            JSONObject ipRun = jRun.getJSONObject("ip_v6");
+                            String ip = ipRun.getString("uuid");
+                            if (ip != null && (!ip.equalsIgnoreCase(""))) {
+                                    allIps.add(ip);
+                                }
                         }
                     }
                 }
