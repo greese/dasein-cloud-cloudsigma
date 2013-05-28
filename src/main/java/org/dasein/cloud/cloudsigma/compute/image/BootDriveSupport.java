@@ -278,9 +278,7 @@ public class BootDriveSupport extends AbstractImageSupport {
 
         while(moreData)  {
             //dmayne 20130218: JSON Parsing
-            logger.debug("Target "+target);
             target = baseTarget+target;
-            logger.debug("final target "+target);
 
             JSONObject jObject = method.list(target);
 
@@ -314,17 +312,11 @@ public class BootDriveSupport extends AbstractImageSupport {
 
                 //dmayne 20130314: check if there are more pages
                 if (jObject.has("meta")) {
-                    logger.debug("Found meta tag");
                     JSONObject meta = jObject.getJSONObject("meta");
 
-                    logger.debug("Number of objects "+list.size()+" out of "+meta.getString("total_count"));
-
                     if (meta.has("next") && !(meta.isNull("next")) && !meta.getString("next").equals("")) {
-                        logger.debug("Found new page "+meta.getString("next"));
                         target = meta.getString("next");
-                        logger.debug("target "+target);
                         target = target.substring(target.indexOf("?"));
-                        logger.debug("new target "+target);
                         moreData = true;
                     }
                     else  {
@@ -354,9 +346,7 @@ public class BootDriveSupport extends AbstractImageSupport {
 
         while(moreData)  {
             //dmayne 20130218: JSON Parsing
-            logger.debug("Target "+target);
             target = baseTarget+target;
-            logger.debug("final target "+target);
 
             JSONObject jObject = method.list(target);
 
@@ -396,17 +386,12 @@ public class BootDriveSupport extends AbstractImageSupport {
 
                 //dmayne 20130314: check if there are more pages
                 if (jObject.has("meta")) {
-                    logger.debug("Found meta tag");
                     JSONObject meta = jObject.getJSONObject("meta");
 
-                    logger.debug("Number of objects "+matches.size()+" out of "+meta.getString("total_count"));
 
                     if (meta.has("next") && !(meta.isNull("next")) && !meta.getString("next").equals("")) {
-                        logger.debug("Found new page "+meta.getString("next"));
                         target = meta.getString("next");
-                        logger.debug("target "+target);
                         target = target.substring(target.indexOf("?"));
-                        logger.debug("new target "+target);
                         moreData = true;
                     }
                     else  {
@@ -562,7 +547,10 @@ public class BootDriveSupport extends AbstractImageSupport {
     @Override
     @Deprecated
     public @Nonnull Iterable<MachineImage> searchMachineImages(@Nullable String keyword, @Nullable Platform platform, @Nullable Architecture architecture) throws CloudException, InternalException {
-        ArrayList<MachineImage> list = new ArrayList<MachineImage>();
+        //dmayne 20130528: no public image API call exists at this time so empty list returned
+        return Collections.emptyList();
+
+        /*ArrayList<MachineImage> list = new ArrayList<MachineImage>();
 
         for (MachineImage img : listImages(ImageClass.MACHINE)) {
             if (img != null && matches(img, keyword, platform, architecture)) {
@@ -575,6 +563,7 @@ public class BootDriveSupport extends AbstractImageSupport {
             }
         }
         return list;
+        */
     }
 
     @Override
@@ -604,7 +593,10 @@ public class BootDriveSupport extends AbstractImageSupport {
 
     @Override
     public @Nonnull Iterable<MachineImage> searchPublicImages(@Nonnull ImageFilterOptions options) throws InternalException, CloudException {
-        if( !ImageClass.MACHINE.equals(options.getImageClass()) ) {
+        //dmayne 20130528: no public image API call exists at this time so empty list returned
+        return Collections.emptyList();
+
+        /*if( !ImageClass.MACHINE.equals(options.getImageClass()) ) {
             return Collections.emptyList();
         }
         ArrayList<MachineImage> matches = new ArrayList<MachineImage>();
@@ -681,6 +673,7 @@ public class BootDriveSupport extends AbstractImageSupport {
         }
 
         return matches;
+        */
     }
 
     @Override
@@ -771,6 +764,16 @@ public class BootDriveSupport extends AbstractImageSupport {
                     if (meta.has("os")) {
                         os = meta.getString("os");
                     }
+                    String bits = null;
+                    if (meta.has("arch")) {
+                        bits = meta.getString("arch");
+                    }
+
+                    if (bits != null && bits.contains("32")) {
+                        image.setArchitecture(Architecture.I32);
+                    } else {
+                        image.setArchitecture(Architecture.I64);
+                    }
                 }
 
 
@@ -860,18 +863,6 @@ public class BootDriveSupport extends AbstractImageSupport {
             }
             if (image.getSoftware() == null) {
                 image.setSoftware("");
-            }
-
-            //todo:dmayne 20130218: what is this?
-            String bits = null;
-            if (drive.has("bits")) {
-                bits = drive.getString("bits");
-            }
-
-            if (bits != null && bits.contains("32")) {
-                image.setArchitecture(Architecture.I32);
-            } else {
-                image.setArchitecture(Architecture.I64);
             }
 
             Platform platform = Platform.UNKNOWN;

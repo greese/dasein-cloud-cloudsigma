@@ -218,9 +218,7 @@ public class DataDriveSupport extends AbstractVolumeSupport {
 
         while(moreData)  {
             //dmayne 20130218: JSON Parsing
-            logger.debug("Target "+target);
             target = baseTarget+target;
-            logger.debug("final target "+target);
 
             try {
                 JSONObject json = method.list(target);
@@ -247,17 +245,11 @@ public class DataDriveSupport extends AbstractVolumeSupport {
 
                 //dmayne 20130314: check if there are more pages
                 if (json.has("meta")) {
-                    logger.debug("Found meta tag");
                     JSONObject meta = json.getJSONObject("meta");
 
-                    logger.debug("Number of objects "+list.size()+" out of "+meta.getString("total_count"));
-
                     if (meta.has("next") && !(meta.isNull("next")) && !meta.getString("next").equals("")) {
-                        logger.debug("Found new page "+meta.getString("next"));
                         target = meta.getString("next");
-                        logger.debug("target "+target);
                         target = target.substring(target.indexOf("?"));
-                        logger.debug("new target "+target);
                         moreData = true;
                     }
                     else  {
@@ -285,9 +277,7 @@ public class DataDriveSupport extends AbstractVolumeSupport {
 
         while(moreData)  {
             //dmayne 20130218: JSON Parsing
-            logger.debug("Target "+target);
             target = baseTarget+target;
-            logger.debug("final target "+target);
 
             try {
                 JSONObject json = method.list(target);
@@ -314,17 +304,11 @@ public class DataDriveSupport extends AbstractVolumeSupport {
 
                 //dmayne 20130314: check if there are more pages
                 if (json.has("meta")) {
-                    logger.debug("Found meta tag");
                     JSONObject meta = json.getJSONObject("meta");
 
-                    logger.debug("Number of objects "+list.size()+" out of "+meta.getString("total_count"));
-
                     if (meta.has("next") && !(meta.isNull("next")) && !meta.getString("next").equals("")) {
-                        logger.debug("Found new page "+meta.getString("next"));
                         target = meta.getString("next");
-                        logger.debug("target "+target);
                         target = target.substring(target.indexOf("?"));
-                        logger.debug("new target "+target);
                         moreData = true;
                     }
                     else  {
