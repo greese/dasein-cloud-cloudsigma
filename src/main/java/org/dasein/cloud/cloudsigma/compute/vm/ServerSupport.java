@@ -1178,6 +1178,10 @@ public class ServerSupport implements VirtualMachineSupport {
             } else {
                 method.postString(toServerURL(vmId, "action/?do=stop"), "");
             }
+            //dmayne 20130528: wait for server to be stopped
+            // as some activities require this state before continuing
+            VirtualMachine after = getVirtualMachine(vmId);
+            waitForState(after, (CalendarWrapper.MINUTE * 5L), VmState.STOPPED);
         } finally {
             if (logger.isTraceEnabled()) {
                 logger.trace("EXIT - " + ServerSupport.class.getName() + ".stop()");
