@@ -93,8 +93,30 @@ public class BootDriveSupport extends AbstractImageSupport {
 
 
             JSONObject jDrive = null;
-            JSONObject obj = new JSONObject(method.postString(toDriveURL(driveId, "action/?do=clone"), newDrive.toString()));
-            if (obj != null) {
+            //dmayne 20130529: determine if this is private or library drive
+            boolean publicImage = false;
+            if (currentDrive.has("image_type")) {
+                publicImage = true;
+                //library image: now check it is definitely a disk and not CDROM
+                if (currentDrive.has("media") && !currentDrive.isNull("media"))   {
+                    String media = currentDrive.getString("media");
+                    if (media.equalsIgnoreCase("cdrom")) {
+                        logger.info("Can't clone drive as image is cdrom");
+                        throw new InternalException("Can't clone drive as image is cdrom");
+                    }
+                }
+                else {
+                    throw new CloudException("Can't clone drive: unknown media "+driveId);
+                }
+            }
+
+            JSONObject obj;
+            if (publicImage) {
+                obj = new JSONObject(method.postString(toPublicImageURL(driveId, "action/?do=clone"), newDrive.toString()));
+            }
+            else {
+                obj = new JSONObject(method.postString(toDriveURL(driveId, "action/?do=clone"), newDrive.toString()));
+            }if (obj != null) {
                 jDrive = (JSONObject) obj;
             }
 
@@ -117,14 +139,21 @@ public class BootDriveSupport extends AbstractImageSupport {
             JSONObject jDrive = null;
             if (body != null) {
                 jDrive = new JSONObject(body);
+                //dmayne 20130529: library drive can be returned in above call
+                // check if owner is null and if so, call the library endpoint
+                if (!jDrive.has("owner") || jDrive.isNull("owner")) {
+                    jDrive = null;
+                }
             }
 
-            //todo: dmayne 20130305: not implemented by cloudsigma yet
-           /* if( jDrive == null ) {
+            if( jDrive == null ) {
                 System.out.println("Failed " + driveId + ", looking...");
-                jDrive = method.getObject("/drives/standard/img/" + driveId + "/info");
+                body = method.getString(toPublicImageURL(driveId, ""));
+                if (body != null) {
+                    jDrive = new JSONObject(body);
+                }
                 System.out.println("SUCCESS: " + (jDrive != null));
-            }*/
+            }
             return jDrive;
         }
         catch (JSONException e) {
@@ -278,9 +307,7 @@ public class BootDriveSupport extends AbstractImageSupport {
 
         while(moreData)  {
             //dmayne 20130218: JSON Parsing
-            logger.debug("Target "+target);
             target = baseTarget+target;
-            logger.debug("final target "+target);
 
             JSONObject jObject = method.list(target);
 
@@ -314,17 +341,11 @@ public class BootDriveSupport extends AbstractImageSupport {
 
                 //dmayne 20130314: check if there are more pages
                 if (jObject.has("meta")) {
-                    logger.debug("Found meta tag");
                     JSONObject meta = jObject.getJSONObject("meta");
 
-                    logger.debug("Number of objects "+list.size()+" out of "+meta.getString("total_count"));
-
                     if (meta.has("next") && !(meta.isNull("next")) && !meta.getString("next").equals("")) {
-                        logger.debug("Found new page "+meta.getString("next"));
                         target = meta.getString("next");
-                        logger.debug("target "+target);
                         target = target.substring(target.indexOf("?"));
-                        logger.debug("new target "+target);
                         moreData = true;
                     }
                     else  {
@@ -354,9 +375,7 @@ public class BootDriveSupport extends AbstractImageSupport {
 
         while(moreData)  {
             //dmayne 20130218: JSON Parsing
-            logger.debug("Target "+target);
             target = baseTarget+target;
-            logger.debug("final target "+target);
 
             JSONObject jObject = method.list(target);
 
@@ -396,17 +415,12 @@ public class BootDriveSupport extends AbstractImageSupport {
 
                 //dmayne 20130314: check if there are more pages
                 if (jObject.has("meta")) {
-                    logger.debug("Found meta tag");
                     JSONObject meta = jObject.getJSONObject("meta");
 
-                    logger.debug("Number of objects "+matches.size()+" out of "+meta.getString("total_count"));
 
                     if (meta.has("next") && !(meta.isNull("next")) && !meta.getString("next").equals("")) {
-                        logger.debug("Found new page "+meta.getString("next"));
                         target = meta.getString("next");
-                        logger.debug("target "+target);
                         target = target.substring(target.indexOf("?"));
-                        logger.debug("new target "+target);
                         moreData = true;
                     }
                     else  {
@@ -437,43 +451,56 @@ public class BootDriveSupport extends AbstractImageSupport {
         ArrayList<MachineImage> list = new ArrayList<MachineImage>();
         CloudSigmaMethod method = new CloudSigmaMethod(provider);
 
-        //dmayne 20130218: use JSON parsing
-        //todo: dmayne 20130220: how do we establish image drives?
-        //todo: dmayne 20130305: not implemented by cloudsigma yet
-        /*JSONObject jObj = method.list("/drives/standard/img/info");
+        boolean moreData = true;
+        String baseTarget = "/libdrives/detail/";
+        String target = "";
 
-        if (jObj == null) {
-            throw new CloudException("Could not identify drive endpoint for CloudSigma");
-        }
+        while(moreData)  {
+            //dmayne 20130218: JSON Parsing
+            target = baseTarget+target;
 
-        if (jObj.has("objects")) {
-            JSONArray objects = jObj.getJSONArray("objects");
-            for (int i = 0; i < objects.size(); i++) {
-                JSONObject jImage = objects.getJSONObject(i);
-                //dmayne 20130522: check that we are looking at an image
-                //(will have an image_type attribute)
-                JSONObject metadata = jImage.getJSONObject("meta");
-                if (metadata.has("image_type")) {
-                    String id = null;
-                    if (jImage.has("owner")) {
-                        JSONObject owner = jImage.getJSONObject("owner");
-                        if (!owner.isNullObject() && owner.has("uuid")) {
-                            id = owner.getString("uuid");
+            JSONObject jObj = method.list(target);
+            try{
+                if (jObj == null) {
+                    throw new CloudException("Could not identify drive endpoint for CloudSigma");
+                }
+
+                if (jObj.has("objects")){
+                    JSONArray objects = jObj.getJSONArray("objects");
+                    for (int i = 0; i < objects.length(); i++) {
+                        JSONObject jImage = objects.getJSONObject(i);
+                        String id = null;
+                        if (jImage.has("owner") && jImage.isNull("owner")) {
+                            id = "00000000-0000-0000-0000-000000000001";
                         }
-                    }
-                    if (id != null && id.trim().equals("")) {
-                        id = null;
-                    }
-                    if (accountId.equals(id)) {
-                        MachineImage img = toMachineImage(jImage);
-    
-                        if (img != null) {
-                            list.add(img);
+                        if (accountId.equals(id)) {
+                            MachineImage img = toPublicMachineImage(jImage);
+
+                            if( img != null ) {
+                                list.add(img);
+                            }
                         }
                     }
                 }
+
+                //dmayne 20130314: check if there are more pages
+                if (jObj.has("meta")) {
+                    JSONObject meta = jObj.getJSONObject("meta");
+
+                    if (meta.has("next") && !(meta.isNull("next")) && !meta.getString("next").equals("")) {
+                        target = meta.getString("next");
+                        target = target.substring(target.indexOf("?"));
+                        moreData = true;
+                    }
+                    else  {
+                        moreData = false;
+                    }
+                }
             }
-        }*/
+            catch (JSONException e) {
+                throw new InternalException(e);
+            }
+        }
 
         return list;
     }
@@ -564,11 +591,11 @@ public class BootDriveSupport extends AbstractImageSupport {
     public @Nonnull Iterable<MachineImage> searchMachineImages(@Nullable String keyword, @Nullable Platform platform, @Nullable Architecture architecture) throws CloudException, InternalException {
         ArrayList<MachineImage> list = new ArrayList<MachineImage>();
 
-        for (MachineImage img : listImages(ImageClass.MACHINE)) {
+        /*for (MachineImage img : listImages(ImageClass.MACHINE)) {
             if (img != null && matches(img, keyword, platform, architecture)) {
                 list.add(img);
             }
-        }
+        }*/
         for (MachineImage img : listImagesComplete(null)) {
             if (img != null && matches(img, keyword, platform, architecture)) {
                 list.add(img);
@@ -611,14 +638,11 @@ public class BootDriveSupport extends AbstractImageSupport {
         CloudSigmaMethod method = new CloudSigmaMethod(provider);
 
         boolean moreData = true;
-        String baseTarget = "/drives/detail/";
+        String baseTarget = "/libdrives/detail/";
         String target = "";
 
         while(moreData)  {
-            //dmayne 20130218: JSON Parsing
-            logger.debug("Target "+target);
             target = baseTarget+target;
-            logger.debug("final target "+target);
 
             JSONObject jObject = method.list(target);
 
@@ -630,26 +654,15 @@ public class BootDriveSupport extends AbstractImageSupport {
                     JSONArray objects = jObject.getJSONArray("objects");
                     for (int i = 0; i < objects.length(); i++) {
                         JSONObject jImage = objects.getJSONObject(i);
-                        //dmayne 20130522: check that we are looking at an image
-                        //(will have an image_type attribute)
-                        JSONObject metadata = jImage.getJSONObject("meta");
-                        if (metadata.has("image_type")) {
-                            String id = null;
-                            if (jImage.has("owner")) {
-                                JSONObject owner = jImage.getJSONObject("owner");
-                                if (owner != null && owner.has("uuid")){
-                                    id = owner.getString("uuid");
-                                }
-                            }
-                            if (id != null && id.trim().equals("")) {
-                                id = null;
-                            }
-                            if( id == null || id.equals("00000000-0000-0000-0000-000000000001") ) {
-                                MachineImage img = toMachineImage(jImage);
-    
-                                if( img != null && options.matches(img) ) {
-                                    matches.add(img);
-                                }
+                        String id = null;
+                        if (jImage.has("owner") && jImage.isNull("owner")) {
+                            id = "00000000-0000-0000-0000-000000000001";
+                        }
+                        if( id == null || id.equals("00000000-0000-0000-0000-000000000001") ) {
+                            MachineImage img = toPublicMachineImage(jImage);
+
+                            if( img != null && options.matches(img) ) {
+                                matches.add(img);
                             }
                         }
                     }
@@ -657,17 +670,11 @@ public class BootDriveSupport extends AbstractImageSupport {
 
                 //dmayne 20130314: check if there are more pages
                 if (jObject.has("meta")) {
-                    logger.debug("Found meta tag");
                     JSONObject meta = jObject.getJSONObject("meta");
 
-                    logger.debug("Number of objects "+matches.size()+" out of "+meta.getString("total_count"));
-
                     if (meta.has("next") && !(meta.isNull("next")) && !meta.getString("next").equals("")) {
-                        logger.debug("Found new page "+meta.getString("next"));
                         target = meta.getString("next");
-                        logger.debug("target "+target);
                         target = target.substring(target.indexOf("?"));
-                        logger.debug("new target "+target);
                         moreData = true;
                     }
                     else  {
@@ -718,15 +725,12 @@ public class BootDriveSupport extends AbstractImageSupport {
             logger.debug("drive is null");
             return null;
         }
-        //todo: dmayne 20130305: not implemented by cloudsigma yet
         try {
-            if (drive.has("claimed")) {
-                String id = drive.getString("claimed");
-
-                if (id != null && !id.trim().equals("") && !id.contains("imaging")) {
-                    return null;
-                }
+            if (drive.has("image_type")) {
+                //dmayne 20130529: this is a library drive
+                return toPublicMachineImage(drive);
             }
+
             ProviderContext ctx = provider.getContext();
 
             if (ctx == null) {
@@ -771,6 +775,16 @@ public class BootDriveSupport extends AbstractImageSupport {
                     if (meta.has("os")) {
                         os = meta.getString("os");
                     }
+                    String bits = null;
+                    if (meta.has("arch")) {
+                        bits = meta.getString("arch");
+                    }
+
+                    if (bits != null && bits.contains("32")) {
+                        image.setArchitecture(Architecture.I32);
+                    } else {
+                        image.setArchitecture(Architecture.I64);
+                    }
                 }
 
 
@@ -782,7 +796,7 @@ public class BootDriveSupport extends AbstractImageSupport {
                 }
             }
             String user = null;
-            if (drive.has("owner")) {
+            if (drive.has("owner") && !drive.isNull("owner")) {
                 JSONObject owner = drive.getJSONObject("owner");
                 if (owner != null && owner.has("uuid")) {
                     user = owner.getString("uuid");
@@ -840,6 +854,8 @@ public class BootDriveSupport extends AbstractImageSupport {
                     logger.warn("Unknown size value: " + size);
                 }
             }
+            String media = drive.getString("media");
+            image.setTag("media", media);
 
             String software = null;
             if (drive.has("licenses")) {
@@ -862,16 +878,177 @@ public class BootDriveSupport extends AbstractImageSupport {
                 image.setSoftware("");
             }
 
-            //todo:dmayne 20130218: what is this?
+            Platform platform = Platform.UNKNOWN;
+            if (os != null && !os.equals("")) {
+                platform = Platform.guess(os);
+            }
+
+            if (platform.equals(Platform.UNKNOWN)) {
+                platform = Platform.guess(image.getName());
+                if (platform.equals(Platform.UNKNOWN)) {
+                    //check description followed by install notes
+                    platform = Platform.guess(image.getDescription());
+                    if (platform.equals(Platform.UNKNOWN)){
+                        platform = Platform.guess(install_notes);
+                    }
+                }
+            } else if (platform.equals(Platform.UNIX)) {
+                Platform p = Platform.guess(image.getName());
+
+                if (!p.equals(Platform.UNKNOWN)) {
+                    platform = p;
+                }
+            }
+
+            image.setPlatform(platform);
+
+            if (image.getProviderOwnerId() == null) {
+                image.setProviderOwnerId(ctx.getAccountNumber());
+            }
+            if (image.getProviderMachineImageId() == null) {
+                return null;
+            }
+            if (image.getName() == null) {
+                image.setName(image.getProviderMachineImageId());
+            }
+            if (image.getDescription() == null) {
+                image.setDescription(image.getName());
+            }
+            return image;
+        }
+        catch (JSONException e) {
+            throw new InternalException(e);
+        }
+    }
+
+    private @Nullable MachineImage toPublicMachineImage(@Nullable JSONObject drive) throws CloudException, InternalException {
+        if (drive == null) {
+            logger.debug("drive is null");
+            return null;
+        }
+        try {
+            ProviderContext ctx = provider.getContext();
+
+            if (ctx == null) {
+                throw new NoContextException();
+            }
+            String regionId = ctx.getRegionId();
+
+            if (regionId == null) {
+                throw new CloudSigmaConfigurationException("No region was specified for this request");
+            }
+            MachineImage image = new MachineImage();
+
+            image.setProviderRegionId(regionId);
+            image.setCurrentState(MachineImageState.PENDING);
+            image.setType(MachineImageType.VOLUME);
+            image.setImageClass(ImageClass.MACHINE);
+            String id = drive.getString("uuid");
+
+            if (id != null && !id.equals("")) {
+                image.setProviderMachineImageId(id);
+            }
+            String name = drive.getString("name");
+            if (name != null && !name.equals("")) {
+                image.setName(name);
+            }
+
+            String description = null;
+            String os = null;
+            String install_notes = null;
+            if (drive.has("description")) {
+                description = drive.getString("description");
+            }
+            if (drive.has("install_notes")) {
+                install_notes = drive.getString("install_notes");
+            }
+            if (drive.has("os")) {
+                os = drive.getString("os");
+            }
             String bits = null;
-            if (drive.has("bits")) {
-                bits = drive.getString("bits");
+            if (drive.has("arch")) {
+                bits = drive.getString("arch");
             }
 
             if (bits != null && bits.contains("32")) {
                 image.setArchitecture(Architecture.I32);
             } else {
                 image.setArchitecture(Architecture.I64);
+            }
+
+            if (description != null && !description.equals("")) {
+                image.setDescription(description);
+            }
+            else if (install_notes != null && !install_notes.equals("")) {
+                image.setDescription(install_notes);
+            }
+
+            String user = null;
+            if (drive.has("owner") && !drive.isNull("owner")) {
+                JSONObject owner = drive.getJSONObject("owner");
+                if (owner != null && owner.has("uuid")) {
+                    user = owner.getString("uuid");
+                }
+            }
+            if (user != null && !user.equals("")) {
+                image.setProviderOwnerId(user);
+            } else {
+                image.setProviderOwnerId("00000000-0000-0000-0000-000000000001");
+            }
+            String s = drive.getString("status");
+
+            if (s != null) {
+                if( s.equalsIgnoreCase("copying") ) {
+                    image.setCurrentState(MachineImageState.PENDING);
+                }
+                //dmayne 20130529: public cdrom drives are always mounted but are available for attaching
+                else if( s.equalsIgnoreCase("unmounted") || s.equalsIgnoreCase("mounted") ) {
+                    image.setCurrentState(MachineImageState.ACTIVE);
+                }
+                else if( s.equalsIgnoreCase("unavailable") ) {
+                    image.setCurrentState(MachineImageState.DELETED);
+                }
+                else {
+                    logger.warn("WARN: Unknown drive state for CloudSigma: " + s);
+                }
+            }
+
+            String size = null;
+            size = drive.getString("size");
+
+            if (size != null) {
+                try {
+                    image.setTag("size", new Storage<org.dasein.util.uom.storage.Byte>(Long.parseLong(size), Storage.BYTE).toString());
+                } catch (NumberFormatException ignore) {
+                    logger.warn("Unknown size value: " + size);
+                }
+            }
+
+            String media = drive.getString("media");
+            image.setTag("media", media);
+
+            String software = null;
+            if (drive.has("licenses") && !drive.isNull("licenses")) {
+                JSONArray licences = drive.getJSONArray("licenses");
+                for (int i = 0; i < licences.length(); i++) {
+                    JSONObject jlicense = licences.getJSONObject(i);
+
+                    if (jlicense.has("license") && !jlicense.isNull("license")) {
+                        JSONObject li = jlicense.getJSONObject("license");
+                        if (li.has("long_name") && !li.isNull("long_name")) {
+                            software = li.getString("long_name");
+                        }
+                    }
+                    if (software != null) {
+                        image.setSoftware(software);
+                        break;
+                    } else {
+                        image.setSoftware("");
+                    }
+                }
+            }
+            if (image.getSoftware() == null) {
+                image.setSoftware("");
             }
 
             Platform platform = Platform.UNKNOWN;
@@ -964,6 +1141,15 @@ public class BootDriveSupport extends AbstractImageSupport {
     private @Nonnull String toDriveURL(@Nonnull String vmId, @Nonnull String action) throws InternalException {
         try {
             return ("/drives/" + URLEncoder.encode(vmId, "utf-8") + "/" + action);
+        } catch (UnsupportedEncodingException e) {
+            logger.error("UTF-8 not supported: " + e.getMessage());
+            throw new InternalException(e);
+        }
+    }
+
+    private @Nonnull String toPublicImageURL(@Nonnull String vmId, @Nonnull String action) throws InternalException {
+        try {
+            return ("/libdrives/" + URLEncoder.encode(vmId, "utf-8") + "/" + action);
         } catch (UnsupportedEncodingException e) {
             logger.error("UTF-8 not supported: " + e.getMessage());
             throw new InternalException(e);
