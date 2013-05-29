@@ -93,8 +93,30 @@ public class BootDriveSupport extends AbstractImageSupport {
 
 
             JSONObject jDrive = null;
-            JSONObject obj = new JSONObject(method.postString(toDriveURL(driveId, "action/?do=clone"), newDrive.toString()));
-            if (obj != null) {
+            //dmayne 20130529: determine if this is private or library drive
+            boolean publicImage = false;
+            if (currentDrive.has("image_type")) {
+                publicImage = true;
+                //library image: now check it is definitely a disk and not CDROM
+                if (currentDrive.has("media") && !currentDrive.isNull("media"))   {
+                    String media = currentDrive.getString("media");
+                    if (media.equalsIgnoreCase("cdrom")) {
+                        logger.info("Can't clone drive as image is cdrom");
+                        throw new InternalException("Can't clone drive as image is cdrom");
+                    }
+                }
+                else {
+                    throw new CloudException("Can't clone drive: unknown media "+driveId);
+                }
+            }
+
+            JSONObject obj;
+            if (publicImage) {
+                obj = new JSONObject(method.postString(toPublicImageURL(driveId, "action/?do=clone"), newDrive.toString()));
+            }
+            else {
+                obj = new JSONObject(method.postString(toDriveURL(driveId, "action/?do=clone"), newDrive.toString()));
+            }if (obj != null) {
                 jDrive = (JSONObject) obj;
             }
 
@@ -117,11 +139,16 @@ public class BootDriveSupport extends AbstractImageSupport {
             JSONObject jDrive = null;
             if (body != null) {
                 jDrive = new JSONObject(body);
+                //dmayne 20130529: library drive can be returned in above call
+                // check if owner is null and if so, call the library endpoint
+                if (!jDrive.has("owner") || jDrive.isNull("owner")) {
+                    jDrive = null;
+                }
             }
 
             if( jDrive == null ) {
                 System.out.println("Failed " + driveId + ", looking...");
-                body = method.getString("/libdrives/" + URLEncoder.encode(driveId, "utf-8"));
+                body = method.getString(toPublicImageURL(driveId, ""));
                 if (body != null) {
                     jDrive = new JSONObject(body);
                 }
@@ -129,11 +156,7 @@ public class BootDriveSupport extends AbstractImageSupport {
             }
             return jDrive;
         }
-            catch (UnsupportedEncodingException e) {
-            logger.error("UTF-8 not supported: " + e.getMessage());
-            throw new InternalException(e);
-        }
-            catch (JSONException e) {
+        catch (JSONException e) {
             throw new InternalException(e);
         }
     }
@@ -773,7 +796,7 @@ public class BootDriveSupport extends AbstractImageSupport {
                 }
             }
             String user = null;
-            if (drive.has("owner")) {
+            if (drive.has("owner") && !drive.isNull("owner")) {
                 JSONObject owner = drive.getJSONObject("owner");
                 if (owner != null && owner.has("uuid")) {
                     user = owner.getString("uuid");
@@ -831,6 +854,8 @@ public class BootDriveSupport extends AbstractImageSupport {
                     logger.warn("Unknown size value: " + size);
                 }
             }
+            String media = drive.getString("media");
+            image.setTag("media", media);
 
             String software = null;
             if (drive.has("licenses")) {
@@ -973,10 +998,11 @@ public class BootDriveSupport extends AbstractImageSupport {
             String s = drive.getString("status");
 
             if (s != null) {
-                if( s.equalsIgnoreCase("mounted") || s.equalsIgnoreCase("copying") ) {
+                if( s.equalsIgnoreCase("copying") ) {
                     image.setCurrentState(MachineImageState.PENDING);
                 }
-                else if( s.equalsIgnoreCase("unmounted") ) {
+                //dmayne 20130529: public cdrom drives are always mounted but are available for attaching
+                else if( s.equalsIgnoreCase("unmounted") || s.equalsIgnoreCase("mounted") ) {
                     image.setCurrentState(MachineImageState.ACTIVE);
                 }
                 else if( s.equalsIgnoreCase("unavailable") ) {
@@ -997,6 +1023,9 @@ public class BootDriveSupport extends AbstractImageSupport {
                     logger.warn("Unknown size value: " + size);
                 }
             }
+
+            String media = drive.getString("media");
+            image.setTag("media", media);
 
             String software = null;
             if (drive.has("licenses") && !drive.isNull("licenses")) {
@@ -1112,6 +1141,15 @@ public class BootDriveSupport extends AbstractImageSupport {
     private @Nonnull String toDriveURL(@Nonnull String vmId, @Nonnull String action) throws InternalException {
         try {
             return ("/drives/" + URLEncoder.encode(vmId, "utf-8") + "/" + action);
+        } catch (UnsupportedEncodingException e) {
+            logger.error("UTF-8 not supported: " + e.getMessage());
+            throw new InternalException(e);
+        }
+    }
+
+    private @Nonnull String toPublicImageURL(@Nonnull String vmId, @Nonnull String action) throws InternalException {
+        try {
+            return ("/libdrives/" + URLEncoder.encode(vmId, "utf-8") + "/" + action);
         } catch (UnsupportedEncodingException e) {
             logger.error("UTF-8 not supported: " + e.getMessage());
             throw new InternalException(e);

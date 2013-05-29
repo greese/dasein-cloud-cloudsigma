@@ -600,56 +600,74 @@ public class ServerSupport extends AbstractVMSupport {
             if (img == null) {
                 throw new CloudException("No such machine image: " + withLaunchOptions.getMachineImageId());
             }
+
+            String media = img.getTag("media").toString();
+
             if (logger.isInfoEnabled()) {
                 logger.info("Cloning drive from machine image " + img.getProviderMachineImageId() + "...");
             }
-            JSONObject drive = provider.getComputeServices().getImageSupport().cloneDrive(withLaunchOptions.getMachineImageId(), withLaunchOptions.getHostName(), null);
 
-            if (logger.isDebugEnabled()) {
-                logger.debug("drive=" + drive);
-            }
-            String driveId = null;
-            try {
-                JSONObject actualDrive = null;
-                if (drive.has("objects")) {
-                    JSONArray objects = drive.getJSONArray("objects");
-                    actualDrive = (JSONObject) objects.get(0);
-                    driveId = actualDrive.getString("uuid");
-                }
+            String imageDriveId = null;
+            //dmayne 20130529: cdrom does not need to be cloned and can be attached directly
+            if (!media.equals("cdrom")) {
+                JSONObject drive = provider.getComputeServices().getImageSupport().cloneDrive(withLaunchOptions.getMachineImageId(), withLaunchOptions.getHostName(), null);
 
-                if (driveId == null) {
-                    throw new CloudException("No drive was cloned to support the machine launch process");
+                if (logger.isDebugEnabled()) {
+                    logger.debug("drive=" + drive);
                 }
-                long timeout = System.currentTimeMillis() + (CalendarWrapper.MINUTE * 40L);
-                String status = actualDrive.getString("status");
-
-                if (logger.isInfoEnabled()) {
-                    logger.info("Waiting for new drive " + driveId + " to become active...");
-                }
-                while (timeout > System.currentTimeMillis()) {
-                    if (logger.isDebugEnabled()) {
-                        logger.debug("status.drive." + driveId + "=" + status);
+                String driveId = null;
+                try {
+                    JSONObject actualDrive = null;
+                    if (drive.has("objects")) {
+                        JSONArray objects = drive.getJSONArray("objects");
+                        actualDrive = (JSONObject) objects.get(0);
+                        driveId = actualDrive.getString("uuid");
                     }
-                    if (status != null && (status.equals("mounted") || status.equals("unmounted"))) {
-                        if (logger.isInfoEnabled()) {
-                            logger.info("Drive is now ready for launching");
+
+                    if (driveId == null) {
+                        throw new CloudException("No drive was cloned to support the machine launch process");
+                    }
+                    long timeout = System.currentTimeMillis() + (CalendarWrapper.MINUTE * 40L);
+                    String status = actualDrive.getString("status");
+
+                    if (logger.isInfoEnabled()) {
+                        logger.info("Waiting for new drive " + driveId + " to become active...");
+                    }
+                    while (timeout > System.currentTimeMillis()) {
+                        if (logger.isDebugEnabled()) {
+                            logger.debug("status.drive." + driveId + "=" + status);
+                       }
+                        if (status != null && (status.equals("mounted") || status.equals("unmounted"))) {
+                            if (logger.isInfoEnabled()) {
+                                logger.info("Drive is now ready for launching");
+                            }
+                            break;
                         }
-                        break;
+                        try {
+                            Thread.sleep(20000L);
+                        } catch (InterruptedException ignore) {
+                        }
+                        try {
+                            actualDrive = provider.getComputeServices().getImageSupport().getDrive(driveId);
+                        } catch (Throwable ignore) {
+                        }
+                        if (actualDrive == null) {
+                            throw new CloudException("Cloned drive has disappeared");
+                        }
+                        status = actualDrive.getString("status");
                     }
-                    try {
-                        Thread.sleep(20000L);
-                    } catch (InterruptedException ignore) {
-                    }
-                    try {
-                        actualDrive = provider.getComputeServices().getImageSupport().getDrive(driveId);
-                    } catch (Throwable ignore) {
-                    }
-                    if (actualDrive == null) {
-                        throw new CloudException("Cloned drive has disappeared");
-                    }
-                    status = actualDrive.getString("status");
+                    imageDriveId = actualDrive.getString("uuid");
                 }
+                catch (JSONException e) {
+                    throw new InternalException(e);
+                }
+            }
+            else {
+                imageDriveId = img.getProviderMachineImageId();
+            }
 
+            //dmayne 20130529: now we can create server and attach drive
+            try {
                 JSONObject newServer = new JSONObject(), newDrive = new JSONObject(), newNic = new JSONObject(), newVlan = new JSONObject();
                 JSONArray drives = new JSONArray(), nics = new JSONArray();
 
@@ -664,7 +682,7 @@ public class ServerSupport extends AbstractVMSupport {
                 newDrive.put("boot_order", 1);
                 newDrive.put("device", "virtio");
                 newDrive.put("dev_channel", "0:0");
-                newDrive.put("drive", actualDrive.getString("uuid"));
+                newDrive.put("drive", imageDriveId);
 
                 drives.put(newDrive);
 
