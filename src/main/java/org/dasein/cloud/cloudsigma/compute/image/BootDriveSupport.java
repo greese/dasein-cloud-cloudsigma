@@ -1337,11 +1337,10 @@ public class BootDriveSupport implements MachineImageSupport {
             String s = drive.getString("status");
 
             if (s != null) {
-                if( s.equalsIgnoreCase("copying") ) {
+                if( s.equalsIgnoreCase("copying") || s.equalsIgnoreCase("mounted")) {
                     image.setCurrentState(MachineImageState.PENDING);
                 }
-                //dmayne 20130529: public cdrom drives are always mounted but are available for attaching
-                else if( s.equalsIgnoreCase("unmounted") || s.equalsIgnoreCase("mounted") ) {
+                else if( s.equalsIgnoreCase("unmounted")  ) {
                     image.setCurrentState(MachineImageState.ACTIVE);
                 }
                 else if( s.equalsIgnoreCase("unavailable") ) {
