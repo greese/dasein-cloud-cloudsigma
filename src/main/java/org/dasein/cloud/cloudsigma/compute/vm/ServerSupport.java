@@ -19,18 +19,12 @@
 
 package org.dasein.cloud.cloudsigma.compute.vm;
 
+import org.dasein.cloud.*;
 import org.dasein.cloud.cloudsigma.CloudSigmaException;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.apache.log4j.Logger;
-import org.dasein.cloud.CloudException;
-import org.dasein.cloud.InternalException;
-import org.dasein.cloud.OperationNotSupportedException;
-import org.dasein.cloud.ProviderContext;
-import org.dasein.cloud.Requirement;
-import org.dasein.cloud.ResourceStatus;
-import org.dasein.cloud.Tag;
 import org.dasein.cloud.cloudsigma.CloudSigma;
 import org.dasein.cloud.cloudsigma.CloudSigmaConfigurationException;
 import org.dasein.cloud.cloudsigma.CloudSigmaMethod;
@@ -91,13 +85,6 @@ public class ServerSupport implements VirtualMachineSupport {
                 throw new CloudException("No such virtual machine: " + serverId);
             }
 
-            //check if server needs to be stopped before making changes
-            if (!vm.getCurrentState().equals(VmState.STOPPED)) {
-                stop(vm.getProviderVirtualMachineId());
-                waitForState(vm, CalendarWrapper.MINUTE * 5L, VmState.STOPPED);
-                obj = method.getString(toServerURL(serverId, ""));
-            }
-
             JSONObject server = new JSONObject(obj);
             JSONArray nics = server.getJSONArray("nics");
 
@@ -140,13 +127,6 @@ public class ServerSupport implements VirtualMachineSupport {
                 throw new CloudException("Virtual machine " + serverId + " does not exist");
             }
 
-            //check if server needs to be stopped before making changes
-            if (!vm.getCurrentState().equals(VmState.STOPPED)) {
-                stop(vm.getProviderVirtualMachineId());
-                waitForState(vm, CalendarWrapper.MINUTE * 5L, VmState.STOPPED);
-                obj = method.getString(toServerURL(serverId, ""));
-            }
-
             JSONObject server = new JSONObject(obj);
             JSONArray drives = server.getJSONArray("drives");
 
@@ -154,20 +134,7 @@ public class ServerSupport implements VirtualMachineSupport {
             //todo remove hardcoded values
             newDrive.put("boot_order", drives.length()+1);
             newDrive.put("device", "virtio");
-            // deviceId is always not null here
-            //if (deviceId != null) {
             newDrive.put("dev_channel", deviceId);
-            //}
-            //else {
-            //  if (drives.length() < 10) {
-            //    newDrive.put("dev_channel", "0:"+drives.length());
-            //} else if (drives.length() < 100) {
-            //  newDrive.put("dev_channel", (drives.length()/10)+":"+(drives.length()%10));
-            //}
-            //else {
-            //  throw new CloudException("Maximum drives attached to server "+vm.getProviderVirtualMachineId());
-            //}
-            //}
             newDrive.put("drive", volume.getProviderVolumeId());
 
             drives.put(newDrive);
@@ -185,10 +152,12 @@ public class ServerSupport implements VirtualMachineSupport {
             logger.trace("ENTER - " + ServerSupport.class.getName() + ".change(" + vm + "," + body + ")");
         }
         try {
-            boolean restart = !VmState.STOPPED.equals(vm.getCurrentState());
+            if (!VmState.STOPPED.equals(vm.getCurrentState())) {
+                throw new CloudException("Server must be stopped before making change");
+            }
             VirtualMachine workingVm = vm;
 
-            if (restart) {
+           /* if (restart) {
                 if (logger.isInfoEnabled()) {
                     logger.info("Virtual machine " + vm.getProviderVirtualMachineId() + " needs to be stopped prior to change");
                 }
@@ -204,7 +173,7 @@ public class ServerSupport implements VirtualMachineSupport {
                 if (logger.isInfoEnabled()) {
                     logger.info("Done waiting for " + vm.getProviderVirtualMachineId() + ": " + workingVm.getCurrentState());
                 }
-            }
+            } */
             CloudSigmaMethod method = new CloudSigmaMethod(provider);
 
             if (logger.isInfoEnabled()) {
@@ -217,7 +186,7 @@ public class ServerSupport implements VirtualMachineSupport {
             if (logger.isInfoEnabled()) {
                 logger.info("Change to " + vm.getProviderVirtualMachineId() + " succeeded");
             }
-            if (restart) {
+            /*if (restart) {
                 if (logger.isInfoEnabled()) {
                     logger.info("Restarting " + vm.getProviderVirtualMachineId());
                 }
@@ -243,7 +212,7 @@ public class ServerSupport implements VirtualMachineSupport {
                 t.setName("Restart CloudSigma VM " + id);
                 t.setDaemon(true);
                 t.start();
-            }
+            } */
         } finally {
             if (logger.isTraceEnabled()) {
                 logger.trace("EXIT - " + ServerSupport.class.getName() + ".change()");
@@ -384,13 +353,6 @@ public class ServerSupport implements VirtualMachineSupport {
 
             if (vm == null) {
                 throw new CloudException("No such virtual machine: " + serverId);
-            }
-
-            //check if server needs to be stopped before making changes
-            if (!vm.getCurrentState().equals(VmState.STOPPED)) {
-                stop(vm.getProviderVirtualMachineId());
-                waitForState(vm, CalendarWrapper.MINUTE * 5L, VmState.STOPPED);
-                obj = method.getString(toServerURL(serverId, ""));
             }
 
             String driveId = volume.getProviderVolumeId();
@@ -1113,13 +1075,6 @@ public class ServerSupport implements VirtualMachineSupport {
                 throw new CloudException("No such virtual machine: " + serverId);
             }
 
-            //check if server needs to be stopped before making changes
-            if (!vm.getCurrentState().equals(VmState.STOPPED)) {
-                stop(vm.getProviderVirtualMachineId());
-                waitForState(vm, CalendarWrapper.MINUTE * 5L, VmState.STOPPED);
-                obj = method.getString(toServerURL(serverId, ""));
-            }
-
             JSONObject json = new JSONObject(obj);
             JSONArray nics = json.getJSONArray("nics");
             JSONArray newArray = new JSONArray();
@@ -1163,6 +1118,17 @@ public class ServerSupport implements VirtualMachineSupport {
         catch( CloudSigmaException e ) {
             if( e.getMessage().contains("Cannot start guest in state") ) {
                 return;
+            }
+            if (e.getHttpCode() == 402) {
+                //dmayne 20130603: if error is payment/billing related check for software licenses
+                VirtualMachine vm = getVirtualMachine(vmId);
+                MachineImage image = provider.getComputeServices().getImageSupport().getImage(vm.getProviderMachineImageId());
+                if (image.getSoftware() != null) {
+                    throw new CloudException("Unable to start server - it is associated with a software license which does not have a paid subscription.");
+                }
+                else {
+                    throw new CloudException("Unable to start server - payment required./nPlease check your account subscription and balance");
+                }
             }
             throw e;
         }
