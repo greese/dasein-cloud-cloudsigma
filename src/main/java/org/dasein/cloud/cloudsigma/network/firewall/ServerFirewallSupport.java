@@ -87,6 +87,29 @@ public class ServerFirewallSupport implements FirewallSupport {
     @Nonnull
     @Override
     public String authorize(@Nonnull String firewallId, @Nonnull Direction direction, @Nonnull Permission permission, @Nonnull RuleTarget sourceEndpoint, @Nonnull Protocol protocol, @Nonnull RuleTarget destinationEndpoint, int beginPort, int endPort, @Nonnegative int precedence) throws CloudException, InternalException {
+        CloudSigmaMethod method = new CloudSigmaMethod(provider);
+
+        try{
+            JSONObject fw = new JSONObject(method.getString(toFirewallURL(firewallId, "")));
+            JSONArray rules = fw.getJSONArray("rules");
+
+            JSONObject rule = new JSONObject();
+            rule.put("action", (permission == Permission.ALLOW ? "accept" : "drop"));
+            rule.put("direction", (direction == Direction.INGRESS ? "in" : "out"));
+            rule.put("dst_ip", destinationEndpoint.getCidr());
+            rule.put("dst_port", String.valueOf(beginPort)+(endPort >= 0 ? ":"+String.valueOf(endPort) : ""));
+            rule.put("ip_proto", (protocol == Protocol.TCP ? "tcp" : "udp"));
+            rule.put("src_ip", sourceEndpoint.getCidr());
+            rules.put(rule);
+
+            String firewallObj = method.putString(toFirewallURL(firewallId, ""), fw.toString());
+
+            //todo need to get unique identifier of rule just created
+        }
+        catch (JSONException e) {
+            throw new InternalException(e);
+        }
+
         return null;  //To change body of implemented methods use File | Settings | File Templates.
     }
 
@@ -127,7 +150,7 @@ public class ServerFirewallSupport implements FirewallSupport {
 
     @Override
     public void delete(@Nonnull String firewallId) throws InternalException, CloudException {
-        throw new OperationNotSupportedException("Deleting firewalls is not supported in cloudsigma api");
+        throw new OperationNotSupportedException("Deleting firewalls is not supported in CloudSigma api");
     }
 
     @Nullable
@@ -309,7 +332,10 @@ public class ServerFirewallSupport implements FirewallSupport {
     @Nonnull
     @Override
     public Iterable<RuleTargetType> listSupportedDestinationTypes(boolean inVlan) throws InternalException, CloudException {
-        return null;  //To change body of implemented methods use File | Settings | File Templates.
+        Collection<RuleTargetType> destTypes = new ArrayList<RuleTargetType>();
+        destTypes.add(RuleTargetType.CIDR);
+        destTypes.add(RuleTargetType.GLOBAL);
+        return destTypes;
     }
 
     @Nonnull
@@ -335,7 +361,10 @@ public class ServerFirewallSupport implements FirewallSupport {
     @Nonnull
     @Override
     public Iterable<RuleTargetType> listSupportedSourceTypes(boolean inVlan) throws InternalException, CloudException {
-        return null;  //To change body of implemented methods use File | Settings | File Templates.
+        Collection<RuleTargetType> sourceTypes = new ArrayList<RuleTargetType>();
+        sourceTypes.add(RuleTargetType.CIDR);
+        sourceTypes.add(RuleTargetType.GLOBAL);
+        return sourceTypes;
     }
 
     @Override
@@ -344,8 +373,8 @@ public class ServerFirewallSupport implements FirewallSupport {
     }
 
     @Override
-    public void revoke(@Nonnull String securityGroupId, @Nonnull String cidr, @Nonnull Protocol protocol, int startPort, int endPort) throws CloudException, InternalException {
-        revoke(securityGroupId, Direction.INGRESS, Permission.ALLOW, cidr, protocol, RuleTarget.getGlobal(securityGroupId), startPort, endPort);
+    public void revoke(@Nonnull String firewallId, @Nonnull String cidr, @Nonnull Protocol protocol, int startPort, int endPort) throws CloudException, InternalException {
+        revoke(firewallId, Direction.INGRESS, Permission.ALLOW, cidr, protocol, RuleTarget.getGlobal(firewallId), startPort, endPort);
     }
 
     @Override
@@ -458,7 +487,9 @@ public class ServerFirewallSupport implements FirewallSupport {
             throw new CloudSigmaConfigurationException("No region was specified for this request");
         }
 
-        String ruleId=sequenceNum;
+        //todo find a unique way of identifying rule
+        String ruleId=fwID+sequenceNum;
+
         String providerFirewallId = fwID;
         RuleTarget sourceEndpoint = null;
         Direction direction = null;
