@@ -97,7 +97,7 @@ public class ServerFirewallSupport implements FirewallSupport {
             rule.put("action", (permission == Permission.ALLOW ? "accept" : "drop"));
             rule.put("direction", (direction == Direction.INGRESS ? "in" : "out"));
             rule.put("dst_ip", destinationEndpoint.getCidr());
-            rule.put("dst_port", String.valueOf(beginPort)+(endPort >= 0 ? ":"+String.valueOf(endPort) : ""));
+            rule.put("dst_port", String.valueOf(beginPort)+((endPort >= 0 && endPort!=beginPort) ? ":"+String.valueOf(endPort) : ""));
             rule.put("ip_proto", (protocol == Protocol.TCP ? "tcp" : "udp"));
             rule.put("src_ip", sourceEndpoint.getCidr());
             rules.put(rule);
@@ -194,7 +194,7 @@ public class ServerFirewallSupport implements FirewallSupport {
                     JSONObject firewall = new JSONObject(fwObj);
                     JSONArray matches = firewall.getJSONArray("rules");
                     for (int i= 0; i<matches.length(); i++) {
-                        FirewallRule rule = toFirewallRule(new JSONObject(matches.get(i)), firewallId, String.valueOf(i));
+                        FirewallRule rule = toFirewallRule(new JSONObject(matches.get(i)), firewallId);
                         if (rule != null) {
                             list.add(rule);
                         }
@@ -332,39 +332,51 @@ public class ServerFirewallSupport implements FirewallSupport {
     @Nonnull
     @Override
     public Iterable<RuleTargetType> listSupportedDestinationTypes(boolean inVlan) throws InternalException, CloudException {
-        Collection<RuleTargetType> destTypes = new ArrayList<RuleTargetType>();
-        destTypes.add(RuleTargetType.CIDR);
-        destTypes.add(RuleTargetType.GLOBAL);
-        return destTypes;
+        if (!inVlan) {
+            Collection<RuleTargetType> destTypes = new ArrayList<RuleTargetType>();
+            destTypes.add(RuleTargetType.CIDR);
+            destTypes.add(RuleTargetType.GLOBAL);
+            return destTypes;
+        }
+        throw new OperationNotSupportedException("Firewall policies for vlans not supported");
     }
 
     @Nonnull
     @Override
     public Iterable<Direction> listSupportedDirections(boolean inVlan) throws InternalException, CloudException {
-        ArrayList<Direction>  list = new ArrayList<Direction>();
+        if (!inVlan) {
+            ArrayList<Direction>  list = new ArrayList<Direction>();
 
-        list.add(Direction.EGRESS);
-        list.add(Direction.INGRESS);
-        return list;
+            list.add(Direction.EGRESS);
+            list.add(Direction.INGRESS);
+            return list;
+        }
+        throw new OperationNotSupportedException("Firewall policies for vlans not supported");
     }
 
     @Nonnull
     @Override
     public Iterable<Permission> listSupportedPermissions(boolean inVlan) throws InternalException, CloudException {
-        ArrayList<Permission>  list = new ArrayList<Permission>();
+        if (!inVlan) {
+            ArrayList<Permission>  list = new ArrayList<Permission>();
 
-        list.add(Permission.ALLOW);
-        list.add(Permission.DENY);
-        return list;
+            list.add(Permission.ALLOW);
+            list.add(Permission.DENY);
+            return list;
+        }
+        throw new OperationNotSupportedException("Firewall policies for vlans not supported");
     }
 
     @Nonnull
     @Override
     public Iterable<RuleTargetType> listSupportedSourceTypes(boolean inVlan) throws InternalException, CloudException {
-        Collection<RuleTargetType> sourceTypes = new ArrayList<RuleTargetType>();
-        sourceTypes.add(RuleTargetType.CIDR);
-        sourceTypes.add(RuleTargetType.GLOBAL);
-        return sourceTypes;
+        if (!inVlan) {
+            Collection<RuleTargetType> sourceTypes = new ArrayList<RuleTargetType>();
+            sourceTypes.add(RuleTargetType.CIDR);
+            sourceTypes.add(RuleTargetType.GLOBAL);
+            return sourceTypes;
+        }
+        throw new OperationNotSupportedException("Firewall policies for vlans not supported");
     }
 
     @Override
@@ -394,7 +406,10 @@ public class ServerFirewallSupport implements FirewallSupport {
 
     @Override
     public boolean supportsRules(@Nonnull Direction direction, @Nonnull Permission permission, boolean inVlan) throws CloudException, InternalException {
-        return true;
+        if (!inVlan) {
+            return true;
+        }
+        return false;
     }
 
     @Override
@@ -472,7 +487,7 @@ public class ServerFirewallSupport implements FirewallSupport {
         return new ResourceStatus(fwId, true);
     }
 
-    private FirewallRule toFirewallRule(JSONObject fwRule, String fwID, String sequenceNum) throws CloudException, InternalException{
+    private FirewallRule toFirewallRule(JSONObject fwRule, String fwID) throws CloudException, InternalException{
         if (fwRule == null) {
             return null;
         }
@@ -486,9 +501,6 @@ public class ServerFirewallSupport implements FirewallSupport {
         if (regionId == null) {
             throw new CloudSigmaConfigurationException("No region was specified for this request");
         }
-
-        //todo find a unique way of identifying rule
-        String ruleId=fwID+sequenceNum;
 
         String providerFirewallId = fwID;
         RuleTarget sourceEndpoint = null;
@@ -541,7 +553,7 @@ public class ServerFirewallSupport implements FirewallSupport {
         catch (JSONException e) {
             throw new InternalException(e);
         }
-        return FirewallRule.getInstance(ruleId, providerFirewallId, sourceEndpoint, direction, protocol, permission, destEndpoint, startPort, endPort);
+        return FirewallRule.getInstance(null, providerFirewallId, sourceEndpoint, direction, protocol, permission, destEndpoint, startPort, endPort);
     }
 
     private @Nonnull String toFirewallURL(@Nonnull String firewallId, @Nonnull String action) throws InternalException {
