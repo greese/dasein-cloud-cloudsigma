@@ -104,13 +104,17 @@ public class ServerFirewallSupport implements FirewallSupport {
 
             String firewallObj = method.putString(toFirewallURL(firewallId, ""), fw.toString());
 
-            //todo need to get unique identifier of rule just created
+            if (firewallObj != null) {
+                FirewallRule newRule =  FirewallRule.getInstance(null, firewallId, sourceEndpoint, direction, protocol, permission, destinationEndpoint, beginPort, endPort);
+
+                return newRule.getProviderRuleId();
+            }
         }
         catch (JSONException e) {
             throw new InternalException(e);
         }
 
-        return null;  //To change body of implemented methods use File | Settings | File Templates.
+        throw new CloudException("Firewall rule created but not found in response");
     }
 
     @Nonnull
@@ -194,7 +198,7 @@ public class ServerFirewallSupport implements FirewallSupport {
                     JSONObject firewall = new JSONObject(fwObj);
                     JSONArray matches = firewall.getJSONArray("rules");
                     for (int i= 0; i<matches.length(); i++) {
-                        FirewallRule rule = toFirewallRule(new JSONObject(matches.get(i)), firewallId);
+                        FirewallRule rule = toFirewallRule(matches.getJSONObject(i), firewallId);
                         if (rule != null) {
                             list.add(rule);
                         }
@@ -381,7 +385,25 @@ public class ServerFirewallSupport implements FirewallSupport {
 
     @Override
     public void revoke(@Nonnull String providerFirewallRuleId) throws InternalException, CloudException {
-        //To change body of implemented methods use File | Settings | File Templates.
+        FirewallRule rule = null;
+
+        for( Firewall f : list() ) {
+            String fwId = f.getProviderFirewallId();
+
+            if( fwId != null ) {
+                for( FirewallRule r : getRules(fwId) ) {
+                    if( providerFirewallRuleId.equals(r.getProviderRuleId()) ) {
+                        rule = r;
+                        break;
+                    }
+                }
+            }
+        }
+        if( rule == null ) {
+            throw new CloudException("Unable to parse rule ID: " + providerFirewallRuleId);
+        }
+        revoke(providerFirewallRuleId, rule.getFirewallId());
+
     }
 
     @Override
@@ -401,7 +423,35 @@ public class ServerFirewallSupport implements FirewallSupport {
 
     @Override
     public void revoke(@Nonnull String firewallId, @Nonnull Direction direction, @Nonnull Permission permission, @Nonnull String cidr, @Nonnull Protocol protocol, @Nonnull RuleTarget destination, int beginPort, int endPort) throws CloudException, InternalException {
-        //To change body of implemented methods use File | Settings | File Templates.
+        String tmpRuleId = FirewallRule.getRuleId(firewallId, RuleTarget.getCIDR(cidr), direction, protocol, permission, destination, beginPort, endPort);
+
+        revoke(tmpRuleId, firewallId);
+    }
+
+    private void revoke(@Nonnull String ruleId, @Nonnull String firewallId) throws CloudException, InternalException {
+        CloudSigmaMethod method = new CloudSigmaMethod(provider);
+        JSONArray newArray = new JSONArray();
+
+        try{
+            JSONObject fw = new JSONObject(method.getString(toFirewallURL(firewallId, "")));
+            JSONArray rules = fw.getJSONArray("rules");
+            for (int i = 0; i<rules.length(); i++) {
+                JSONObject rule = rules.getJSONObject(i);
+                FirewallRule r = toFirewallRule(rule, firewallId);
+                if (!r.getProviderRuleId().equalsIgnoreCase(ruleId)) {
+                    newArray.put(rule);
+                }
+            }
+            fw.put("rules", newArray);
+            String jsonBody = fw.toString();
+
+            if (method.putString(toFirewallURL(firewallId, ""), jsonBody) == null) {
+                throw new CloudException("Unable to locate firewall endpoint in CloudSigma");
+            }
+        }
+        catch (JSONException e) {
+            throw new InternalException(e);
+        }
     }
 
     @Override
@@ -512,7 +562,7 @@ public class ServerFirewallSupport implements FirewallSupport {
         int endPort = -1;
 
         try {
-            if (fwRule.has("src_ip")) {
+            if (fwRule.has("src_ip") && !fwRule.isNull("src_ip")) {
                 String sourceIP = fwRule.getString("src_ip");
                 sourceEndpoint = RuleTarget.getCIDR(sourceIP);
             }
@@ -520,7 +570,7 @@ public class ServerFirewallSupport implements FirewallSupport {
                 String dir = fwRule.getString("direction");
                 direction = (dir.equalsIgnoreCase("in") ? Direction.INGRESS : Direction.EGRESS);
             }
-            if (fwRule.has("ip_proto")) {
+            if (fwRule.has("ip_proto") && !fwRule.isNull("ip_proto")) {
                 String proto = fwRule.getString("ip_proto");
                 if (proto.equalsIgnoreCase("tcp")) {
                     protocol = Protocol.TCP;
@@ -531,16 +581,27 @@ public class ServerFirewallSupport implements FirewallSupport {
             }
             if (fwRule.has("action")) {
                 String action = fwRule.getString("action");
-                if (action.equalsIgnoreCase("allow")) {
+                if (action.equalsIgnoreCase("accept")) {
                     permission = Permission.ALLOW;
                 }
                 else if (action.equalsIgnoreCase("drop")) {
                     permission = Permission.DENY;
                 }
             }
-            if (fwRule.has("dst_ip")) {
+            if (fwRule.has("dst_ip") && !fwRule.isNull("dst_ip")) {
                 String destIP = fwRule.getString("dst_ip");
                 destEndpoint = RuleTarget.getCIDR(destIP);
+            }
+            if (fwRule.has("dst_port") && !fwRule.isNull("dst_port")) {
+                String destPort = fwRule.getString("dst_port");
+                if (destPort.indexOf(":") > -1) {
+                    startPort = Integer.parseInt(destPort.substring(0, destPort.indexOf(":")));
+                    endPort = Integer.parseInt(destPort.substring(destPort.indexOf(":")+1, destPort.length()));
+                }
+                else {
+                    startPort = Integer.parseInt(destPort);
+                    endPort = startPort;
+                }
             }
 
             if(sourceEndpoint == null) {
@@ -553,7 +614,10 @@ public class ServerFirewallSupport implements FirewallSupport {
         catch (JSONException e) {
             throw new InternalException(e);
         }
-        return FirewallRule.getInstance(null, providerFirewallId, sourceEndpoint, direction, protocol, permission, destEndpoint, startPort, endPort);
+
+        FirewallRule newRule = FirewallRule.getInstance(null, providerFirewallId, sourceEndpoint, direction, protocol, permission, destEndpoint, startPort, endPort);
+
+        return newRule;
     }
 
     private @Nonnull String toFirewallURL(@Nonnull String firewallId, @Nonnull String action) throws InternalException {
