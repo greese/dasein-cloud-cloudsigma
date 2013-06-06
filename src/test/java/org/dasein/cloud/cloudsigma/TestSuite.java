@@ -19,6 +19,13 @@
 
 package org.dasein.cloud.cloudsigma;
 
+import org.dasein.cloud.test.ComprehensiveTestSuite;
+import org.dasein.cloud.test.TestConfigurationException;
+import junit.framework.Test;
+
 public class TestSuite {
+    static public Test suite() throws TestConfigurationException {
+        return new ComprehensiveTestSuite(CloudSigma.class);
+    }
 
 }
