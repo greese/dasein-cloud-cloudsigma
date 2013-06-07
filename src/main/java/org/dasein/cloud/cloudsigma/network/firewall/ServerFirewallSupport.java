@@ -56,7 +56,34 @@ public class ServerFirewallSupport extends AbstractFirewallSupport {
     @Nonnull
     @Override
     public String authorize(@Nonnull String firewallId, @Nonnull Direction direction, @Nonnull Permission permission, @Nonnull RuleTarget sourceEndpoint, @Nonnull Protocol protocol, @Nonnull RuleTarget destinationEndpoint, int beginPort, int endPort, @Nonnegative int precedence) throws CloudException, InternalException {
-        return null; //To change body of overridden methods use File | Settings | File Templates.
+        CloudSigmaMethod method = new CloudSigmaMethod(provider);
+
+        try{
+            JSONObject fw = new JSONObject(method.getString(toFirewallURL(firewallId, "")));
+            JSONArray rules = fw.getJSONArray("rules");
+
+            JSONObject rule = new JSONObject();
+            rule.put("action", (permission == Permission.ALLOW ? "accept" : "drop"));
+            rule.put("direction", (direction == Direction.INGRESS ? "in" : "out"));
+            rule.put("dst_ip", destinationEndpoint.getCidr());
+            rule.put("dst_port", String.valueOf(beginPort)+((endPort >= 0 && endPort!=beginPort) ? ":"+String.valueOf(endPort) : ""));
+            rule.put("ip_proto", (protocol == Protocol.TCP ? "tcp" : "udp"));
+            rule.put("src_ip", sourceEndpoint.getCidr());
+            rules.put(rule);
+
+            String firewallObj = method.putString(toFirewallURL(firewallId, ""), fw.toString());
+
+            if (firewallObj != null) {
+                FirewallRule newRule =  FirewallRule.getInstance(null, firewallId, sourceEndpoint, direction, protocol, permission, destinationEndpoint, beginPort, endPort);
+
+                return newRule.getProviderRuleId();
+            }
+        }
+        catch (JSONException e) {
+            throw new InternalException(e);
+        }
+
+        throw new CloudException("Firewall rule created but not found in response");
     }
 
     @Nonnull
@@ -90,7 +117,7 @@ public class ServerFirewallSupport extends AbstractFirewallSupport {
 
     @Override
     public void delete(@Nonnull String s) throws InternalException, CloudException {
-        throw new OperationNotSupportedException("Deleting firewalls is not supported in cloudsigma api");
+        throw new OperationNotSupportedException("Deleting firewalls is not supported in CloudSigma api");
     }
 
     @Nullable
@@ -134,7 +161,7 @@ public class ServerFirewallSupport extends AbstractFirewallSupport {
                     JSONObject firewall = new JSONObject(fwObj);
                     JSONArray matches = firewall.getJSONArray("rules");
                     for (int i= 0; i<matches.length(); i++) {
-                        FirewallRule rule = toFirewallRule(new JSONObject(matches.get(i)), firewallId, String.valueOf(i));
+                        FirewallRule rule = toFirewallRule(matches.getJSONObject(i), firewallId);
                         if (rule != null) {
                             list.add(rule);
                         }
@@ -271,34 +298,53 @@ public class ServerFirewallSupport extends AbstractFirewallSupport {
 
     @Nonnull
     @Override
-    public Iterable<RuleTargetType> listSupportedDestinationTypes(boolean b) throws InternalException, CloudException {
-        return null;  //To change body of implemented methods use File | Settings | File Templates.
+    public Iterable<RuleTargetType> listSupportedDestinationTypes(boolean inVlan) throws InternalException, CloudException {
+        if (!inVlan) {
+            Collection<RuleTargetType> destTypes = new ArrayList<RuleTargetType>();
+            destTypes.add(RuleTargetType.CIDR);
+            destTypes.add(RuleTargetType.GLOBAL);
+            return destTypes;
+        }
+        throw new OperationNotSupportedException("Firewall policies for vlans not supported");
     }
 
     @Nonnull
     @Override
-    public Iterable<Direction> listSupportedDirections(boolean b) throws InternalException, CloudException {
-        ArrayList<Direction>  list = new ArrayList<Direction>();
+    public Iterable<Direction> listSupportedDirections(boolean inVlan) throws InternalException, CloudException {
+        if (!inVlan) {
+            ArrayList<Direction>  list = new ArrayList<Direction>();
 
-        list.add(Direction.EGRESS);
-        list.add(Direction.INGRESS);
-        return list;
+            list.add(Direction.EGRESS);
+            list.add(Direction.INGRESS);
+            return list;
+        }
+        throw new OperationNotSupportedException("Firewall policies for vlans not supported");
     }
 
     @Nonnull
     @Override
-    public Iterable<Permission> listSupportedPermissions(boolean b) throws InternalException, CloudException {
-        ArrayList<Permission>  list = new ArrayList<Permission>();
+    public Iterable<Permission> listSupportedPermissions(boolean inVlan) throws InternalException, CloudException {
+        if (!inVlan) {
+            ArrayList<Permission>  list = new ArrayList<Permission>();
 
-        list.add(Permission.ALLOW);
-        list.add(Permission.DENY);
-        return list;
+            list.add(Permission.ALLOW);
+            list.add(Permission.DENY);
+            return list;
+        }
+        throw new OperationNotSupportedException("Firewall policies for vlans not supported");
     }
 
     @Nonnull
     @Override
-    public Iterable<RuleTargetType> listSupportedSourceTypes(boolean b) throws InternalException, CloudException {
-        return null;  //To change body of implemented methods use File | Settings | File Templates.
+    public Iterable<RuleTargetType> listSupportedSourceTypes(boolean inVlan) throws InternalException, CloudException {
+        if (!inVlan) {
+            Collection<RuleTargetType> sourceTypes = new ArrayList<RuleTargetType>();
+            sourceTypes.add(RuleTargetType.CIDR);
+            sourceTypes.add(RuleTargetType.GLOBAL);
+            return sourceTypes;
+        }
+        throw new OperationNotSupportedException("Firewall policies for vlans not supported");
+
     }
 
     @Nonnull
@@ -319,27 +365,75 @@ public class ServerFirewallSupport extends AbstractFirewallSupport {
 
     @Override
     public void revoke(@Nonnull String providerFirewallRuleId) throws InternalException, CloudException {
-        //To change body of implemented methods use File | Settings | File Templates.
+        FirewallRule rule = null;
+
+        for( Firewall f : list() ) {
+            String fwId = f.getProviderFirewallId();
+
+            if( fwId != null ) {
+                for( FirewallRule r : getRules(fwId) ) {
+                    if( providerFirewallRuleId.equals(r.getProviderRuleId()) ) {
+                        rule = r;
+                        break;
+                    }
+                }
+            }
+        }
+        if( rule == null ) {
+            throw new CloudException("Unable to parse rule ID: " + providerFirewallRuleId);
+        }
+        revoke(providerFirewallRuleId, rule.getFirewallId());
     }
 
     @Override
     public void revoke(@Nonnull String firewallId, @Nonnull Direction direction, @Nonnull String source, @Nonnull Protocol protocol, int beginPort, int endPort) throws CloudException, InternalException {
-        //To change body of overridden methods use File | Settings | File Templates.
+        revoke(firewallId, direction, Permission.ALLOW, source, protocol, RuleTarget.getGlobal(firewallId), beginPort, endPort);
     }
 
     @Override
     public void revoke(@Nonnull String firewallId, @Nonnull Direction direction, @Nonnull Permission permission, @Nonnull String source, @Nonnull Protocol protocol, int beginPort, int endPort) throws CloudException, InternalException {
-        //To change body of overridden methods use File | Settings | File Templates.
+        revoke(firewallId, direction, permission, source, protocol, RuleTarget.getGlobal(firewallId), beginPort, endPort);
     }
 
     @Override
     public void revoke(@Nonnull String firewallId, @Nonnull Direction direction, @Nonnull Permission permission, @Nonnull String source, @Nonnull Protocol protocol, @Nonnull RuleTarget target, int beginPort, int endPort) throws CloudException, InternalException {
-        //To change body of overridden methods use File | Settings | File Templates.
+        String tmpRuleId = FirewallRule.getRuleId(firewallId, RuleTarget.getCIDR(source), direction, protocol, permission, target, beginPort, endPort);
+
+        revoke(tmpRuleId, firewallId);
+    }
+
+    private void revoke(@Nonnull String ruleId, @Nonnull String firewallId) throws CloudException, InternalException {
+        CloudSigmaMethod method = new CloudSigmaMethod(provider);
+        JSONArray newArray = new JSONArray();
+
+        try{
+            JSONObject fw = new JSONObject(method.getString(toFirewallURL(firewallId, "")));
+            JSONArray rules = fw.getJSONArray("rules");
+            for (int i = 0; i<rules.length(); i++) {
+                JSONObject rule = rules.getJSONObject(i);
+                FirewallRule r = toFirewallRule(rule, firewallId);
+                if (!r.getProviderRuleId().equalsIgnoreCase(ruleId)) {
+                    newArray.put(rule);
+                }
+            }
+            fw.put("rules", newArray);
+            String jsonBody = fw.toString();
+
+            if (method.putString(toFirewallURL(firewallId, ""), jsonBody) == null) {
+                throw new CloudException("Unable to locate firewall endpoint in CloudSigma");
+            }
+        }
+        catch (JSONException e) {
+            throw new InternalException(e);
+        }
     }
 
     @Override
     public boolean supportsRules(@Nonnull Direction direction, @Nonnull Permission permission, boolean inVlan) throws CloudException, InternalException {
-        return true;
+        if (!inVlan) {
+            return true;
+        }
+        return false;
     }
 
     @Override
@@ -426,7 +520,7 @@ public class ServerFirewallSupport extends AbstractFirewallSupport {
         return new ResourceStatus(fwId, true);
     }
 
-    private FirewallRule toFirewallRule(JSONObject fwRule, String fwID, String sequenceNum) throws CloudException, InternalException{
+    private FirewallRule toFirewallRule(JSONObject fwRule, String fwID) throws CloudException, InternalException{
         if (fwRule == null) {
             return null;
         }
@@ -441,7 +535,6 @@ public class ServerFirewallSupport extends AbstractFirewallSupport {
             throw new CloudSigmaConfigurationException("No region was specified for this request");
         }
 
-        String ruleId=sequenceNum;
         String providerFirewallId = fwID;
         RuleTarget sourceEndpoint = null;
         Direction direction = null;
@@ -452,7 +545,7 @@ public class ServerFirewallSupport extends AbstractFirewallSupport {
         int endPort = -1;
 
         try {
-            if (fwRule.has("src_ip")) {
+            if (fwRule.has("src_ip") && !fwRule.isNull("src_ip")) {
                 String sourceIP = fwRule.getString("src_ip");
                 sourceEndpoint = RuleTarget.getCIDR(sourceIP);
             }
@@ -460,7 +553,7 @@ public class ServerFirewallSupport extends AbstractFirewallSupport {
                 String dir = fwRule.getString("direction");
                 direction = (dir.equalsIgnoreCase("in") ? Direction.INGRESS : Direction.EGRESS);
             }
-            if (fwRule.has("ip_proto")) {
+            if (fwRule.has("ip_proto") && !fwRule.isNull("ip_proto")) {
                 String proto = fwRule.getString("ip_proto");
                 if (proto.equalsIgnoreCase("tcp")) {
                     protocol = Protocol.TCP;
@@ -471,16 +564,28 @@ public class ServerFirewallSupport extends AbstractFirewallSupport {
             }
             if (fwRule.has("action")) {
                 String action = fwRule.getString("action");
-                if (action.equalsIgnoreCase("allow")) {
+                if (action.equalsIgnoreCase("accept")) {
                     permission = Permission.ALLOW;
                 }
                 else if (action.equalsIgnoreCase("drop")) {
                     permission = Permission.DENY;
                 }
             }
-            if (fwRule.has("dst_ip")) {
+            if (fwRule.has("dst_ip") && !fwRule.isNull("dst_ip")) {
                 String destIP = fwRule.getString("dst_ip");
                 destEndpoint = RuleTarget.getCIDR(destIP);
+            }
+
+            if (fwRule.has("dst_port") && !fwRule.isNull("dst_port")) {
+                String destPort = fwRule.getString("dst_port");
+                if (destPort.indexOf(":") > -1) {
+                    startPort = Integer.parseInt(destPort.substring(0, destPort.indexOf(":")));
+                    endPort = Integer.parseInt(destPort.substring(destPort.indexOf(":")+1, destPort.length()));
+                }
+                else {
+                    startPort = Integer.parseInt(destPort);
+                    endPort = startPort;
+                }
             }
 
             if(sourceEndpoint == null) {
@@ -493,7 +598,9 @@ public class ServerFirewallSupport extends AbstractFirewallSupport {
         catch (JSONException e) {
             throw new InternalException(e);
         }
-        return FirewallRule.getInstance(ruleId, providerFirewallId, sourceEndpoint, direction, protocol, permission, destEndpoint, startPort, endPort);
+        FirewallRule newRule = FirewallRule.getInstance(null, providerFirewallId, sourceEndpoint, direction, protocol, permission, destEndpoint, startPort, endPort);
+
+        return newRule;
     }
 
     private @Nonnull String toFirewallURL(@Nonnull String firewallId, @Nonnull String action) throws InternalException {
