@@ -31,6 +31,7 @@ import java.io.UnsupportedEncodingException;
 import java.net.URLEncoder;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.Locale;
 
 /**
@@ -342,7 +343,7 @@ public class ServerFirewallSupport implements FirewallSupport {
             destTypes.add(RuleTargetType.GLOBAL);
             return destTypes;
         }
-        throw new OperationNotSupportedException("Firewall policies for vlans not supported");
+        return Collections.emptyList();
     }
 
     @Nonnull
@@ -355,7 +356,7 @@ public class ServerFirewallSupport implements FirewallSupport {
             list.add(Direction.INGRESS);
             return list;
         }
-        throw new OperationNotSupportedException("Firewall policies for vlans not supported");
+        return Collections.emptyList();
     }
 
     @Nonnull
@@ -368,7 +369,7 @@ public class ServerFirewallSupport implements FirewallSupport {
             list.add(Permission.DENY);
             return list;
         }
-        throw new OperationNotSupportedException("Firewall policies for vlans not supported");
+        return Collections.emptyList();
     }
 
     @Nonnull
@@ -380,7 +381,7 @@ public class ServerFirewallSupport implements FirewallSupport {
             sourceTypes.add(RuleTargetType.GLOBAL);
             return sourceTypes;
         }
-        throw new OperationNotSupportedException("Firewall policies for vlans not supported");
+        return Collections.emptyList();
     }
 
     @Override
