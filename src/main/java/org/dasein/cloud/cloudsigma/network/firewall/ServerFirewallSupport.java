@@ -48,7 +48,7 @@ public class ServerFirewallSupport extends AbstractFirewallSupport {
 
     private CloudSigma provider;
 
-    ServerFirewallSupport(@Nonnull CloudSigma provider) {
+    public ServerFirewallSupport(@Nonnull CloudSigma provider) {
         super(provider);
         this.provider = provider;
     }

@@ -49,8 +49,8 @@ public class CloudSigmaNetworkServices extends AbstractNetworkServices {
         return new ServerVLANSupport(provider);
     }
 
-    /*@Override
+    @Override
     public @Nonnull ServerFirewallSupport getFirewallSupport() {
         return new ServerFirewallSupport(provider);
-    } */
+    }
 }
