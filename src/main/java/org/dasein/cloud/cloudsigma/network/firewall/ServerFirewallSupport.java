@@ -438,7 +438,10 @@ public class ServerFirewallSupport extends AbstractFirewallSupport {
 
     @Override
     public boolean supportsFirewallCreation(boolean inVlan) throws CloudException, InternalException {
-        return true;
+        if (!inVlan) {
+            return true;
+        }
+        return false;
     }
 
     @Override
