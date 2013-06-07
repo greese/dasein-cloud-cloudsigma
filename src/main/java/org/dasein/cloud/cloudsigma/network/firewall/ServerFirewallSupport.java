@@ -90,29 +90,34 @@ public class ServerFirewallSupport extends AbstractFirewallSupport {
     @Nonnull
     @Override
     public String create(@Nonnull FirewallCreateOptions options) throws InternalException, CloudException {
-        CloudSigmaMethod method = new CloudSigmaMethod(provider);
+        if (options.getProviderVlanId() == null) {
+            CloudSigmaMethod method = new CloudSigmaMethod(provider);
 
-        try {
-            JSONObject body = new JSONObject(), fwName = new JSONObject();
-            JSONArray objects = new JSONArray();
-            fwName.put("name", options.getName());
-            objects.put(fwName);
-            body.put("objects", objects);
+            try {
+                JSONObject body = new JSONObject(), fwName = new JSONObject();
+                JSONArray objects = new JSONArray();
+                fwName.put("name", options.getName());
+                objects.put(fwName);
+                body.put("objects", objects);
 
-            JSONObject fwObj = new JSONObject(method.postString("/fwpolicies/", body.toString()));
-            Firewall firewall = null;
-            if (fwObj != null) {
-                JSONArray arr = fwObj.getJSONArray("objects");
-                JSONObject fw = arr.getJSONObject(0);
-                firewall = toFirewall(fw);
+                JSONObject fwObj = new JSONObject(method.postString("/fwpolicies/", body.toString()));
+                Firewall firewall = null;
+                if (fwObj != null) {
+                    JSONArray arr = fwObj.getJSONArray("objects");
+                    JSONObject fw = arr.getJSONObject(0);
+                    firewall = toFirewall(fw);
+                }
+                if (firewall == null) {
+                    throw new CloudException("Firewall created but no information was provided");
+                }
+                return firewall.getProviderFirewallId();
             }
-            if (firewall == null) {
-                throw new CloudException("Firewall created but no information was provided");
+            catch (JSONException e) {
+                throw new InternalException(e);
             }
-            return firewall.getProviderFirewallId();
         }
-        catch (JSONException e) {
-            throw new InternalException(e);
+        else {
+            throw new OperationNotSupportedException("Vlan firewall creation not supported");
         }
     }
 
