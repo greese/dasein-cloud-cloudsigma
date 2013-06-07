@@ -706,6 +706,16 @@ public class ServerSupport implements VirtualMachineSupport {
                     JSONObject newIP = new JSONObject();
                     newIP.put("conf", "dhcp");
                     newNic.put("ip_v4_conf", newIP);
+
+                    //firewall support
+                    if (withLaunchOptions.getFirewallIds() != null) {
+                        if (withLaunchOptions.getFirewallIds().length == 1) {
+                            newNic.put("firewall_policy", withLaunchOptions.getFirewallIds()[0]);
+                        }
+                        else {
+                            logger.warn("Firewall not applied to server as there is more than one - current list has "+withLaunchOptions.getFirewallIds().length);
+                        }
+                    }
                     nics.put(newNic);
                     newServer.put("nics", nics);
                 }
@@ -1444,6 +1454,7 @@ public class ServerSupport implements VirtualMachineSupport {
             }
 
             TreeSet<String> allIps = new TreeSet<String>();
+            ArrayList<String> firewallIds = new ArrayList<String>();
             if (nics != null) {
                 for (int i=0; i < nics.length(); i++) {
                     //todo:dmayne 20130218: will a server ever have both ipv4 and ipv6?
@@ -1521,10 +1532,28 @@ public class ServerSupport implements VirtualMachineSupport {
                             }
                         }
                     }
+
+                    //check for firewall policy
+                    if (jnic.has("firewall_policy") && !jnic.isNull("firewall_policy")) {
+                        JSONObject fw = jnic.getJSONObject("firewall_policy");
+                        if (fw.has("uuid") && !fw.isNull("uuid")) {
+                            String firewall = fw.getString("uuid");
+                            logger.debug("adding firewall policy "+firewall+" to server "+vm.getProviderVirtualMachineId());
+                            firewallIds.add(firewall);
+                        }
+                    }
                 }
             }
             if (!allIps.isEmpty()) {
                 setIP(vm, allIps);
+            }
+
+            if (!firewallIds.isEmpty()) {
+                String[] vmFirewalls = new String[firewallIds.size()];
+                for (int i = 0; i<firewallIds.size(); i++) {
+                    vmFirewalls[i] = firewallIds.get(i);
+                }
+                vm.setProviderFirewallIds(vmFirewalls);
             }
             JSONObject owner = object.getJSONObject("owner");
             String user = owner.getString("uuid");

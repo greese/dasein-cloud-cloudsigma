@@ -153,12 +153,12 @@ public class BootDriveSupport implements MachineImageSupport {
             }
 
             if( jDrive == null ) {
-                System.out.println("Failed " + driveId + ", looking...");
+                logger.debug("Failed " + driveId + ", looking at library...");
                 body = method.getString(toPublicImageURL(driveId, ""));
                 if (body != null) {
                     jDrive = new JSONObject(body);
                 }
-                System.out.println("SUCCESS: " + (jDrive != null));
+                logger.debug("SUCCESS: " + (jDrive != null));
             }
             return jDrive;
         }
