@@ -821,6 +821,19 @@ public class ServerSupport extends AbstractVMSupport {
         }
     }
 
+    @Override
+    public @Nonnull Iterable<String> listFirewalls(@Nonnull String vmId) throws InternalException, CloudException {
+        VirtualMachine vm = getVirtualMachine(vmId);
+
+        String[] firewalls = vm.getProviderFirewallIds();
+        ArrayList<String> list = new ArrayList<String>();
+
+        for (int i= 0; i<firewalls.length; i++) {
+           list.add(firewalls[i]);
+        }
+        return list;
+    }
+
     private transient ArrayList<VirtualMachineProduct> cachedProducts;
 
     @Override
