@@ -522,7 +522,7 @@ public class ServerSupport extends AbstractVMSupport {
 
     @Override
     public boolean isSubscribed() throws CloudException, InternalException {
-        getVirtualMachine("---no such id---");
+        listVirtualMachines();
         return true;
     }
 
