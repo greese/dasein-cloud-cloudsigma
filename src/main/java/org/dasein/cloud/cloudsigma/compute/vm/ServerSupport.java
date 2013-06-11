@@ -538,7 +538,7 @@ public class ServerSupport implements VirtualMachineSupport {
 
     @Override
     public boolean isSubscribed() throws CloudException, InternalException {
-        getVirtualMachine("---no such id---");
+        listVirtualMachines();
         return true;
     }
 
