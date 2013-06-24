@@ -322,7 +322,8 @@ public class BootDriveSupport extends AbstractImageSupport {
                     //dmayne 20130522: check that we are looking at an image
                     //(will have an image_type attribute)
                     JSONObject metadata = jImage.getJSONObject("meta");
-                    if (metadata.has("image_type")) {
+                    String name = jImage.getString("name");
+                    if (metadata.has("image_type") || name.startsWith("esimg-")) {
                         JSONObject owner = jImage.getJSONObject("owner");
                         String id = owner.getString("uuid");
     
@@ -390,7 +391,8 @@ public class BootDriveSupport extends AbstractImageSupport {
                         //dmayne 20130522: check that we are looking at an image
                         //(will have an image_type attribute)
                         JSONObject metadata = jImage.getJSONObject("meta");
-                        if (metadata.has("image_type")) {
+                        String name = jImage.getString("name");
+                    if (metadata.has("image_type") || name.startsWith("esimg-")) {
                             String id = null;
                             if (jImage.has("owner")) {
                                 JSONObject owner = jImage.getJSONObject("owner");

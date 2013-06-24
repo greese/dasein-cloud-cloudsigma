@@ -233,7 +233,8 @@ public class DataDriveSupport extends AbstractVolumeSupport {
                         //dmayne 20130522: check that we are looking at a volume
                         //(will not have an image_type attribute)
                         JSONObject metadata = jVolume.getJSONObject("meta");
-                        if (!metadata.has("image_type")) {
+                        String name = jVolume.getString("name");
+                        if (!metadata.has("image_type") && !name.startsWith("esimg-")) {
                             ResourceStatus volume = toStatus(jVolume);
 
                             if (volume != null) {
@@ -292,7 +293,8 @@ public class DataDriveSupport extends AbstractVolumeSupport {
                         //dmayne 20130522: check that we are looking at a volume
                         //(will not have an image_type attribute)
                         JSONObject metadata = jVolume.getJSONObject("meta");
-                        if (!metadata.has("image_type")) {
+                        String name = jVolume.getString("name");
+                        if (!metadata.has("image_type") && !name.startsWith("esimg-")) {
                             Volume volume = toVolume(jVolume);
 
                             if (volume != null) {
