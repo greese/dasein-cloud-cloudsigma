@@ -291,7 +291,7 @@ public class ServerFirewallSupport implements FirewallSupport {
 
         boolean moreData = true;
         String baseTarget = "/fwpolicies/";
-        String target = "";
+        String target = "?fields=uuid";
 
         while(moreData)  {
             target = baseTarget+target;

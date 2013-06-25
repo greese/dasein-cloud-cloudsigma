@@ -402,8 +402,8 @@ public class BootDriveSupport implements MachineImageSupport {
         CloudSigmaMethod method = new CloudSigmaMethod(provider);
 
         boolean moreData = true;
-        String baseTarget = "/drives/detail/";
-        String target = "";
+        String baseTarget = "/drives";
+        String target = "/?fields=uuid,meta,name,status,owner";
 
         while(moreData)  {
             target = baseTarget+target;
@@ -1431,13 +1431,6 @@ public class BootDriveSupport implements MachineImageSupport {
             return null;
         }
         try {
-            if (drive.has("claimed")) {
-                String id = drive.getString("claimed");
-
-                if (id != null && !id.trim().equals("") && !id.contains("imaging")) {
-                    return null;
-                }
-            }
             ProviderContext ctx = provider.getContext();
 
             if (ctx == null) {

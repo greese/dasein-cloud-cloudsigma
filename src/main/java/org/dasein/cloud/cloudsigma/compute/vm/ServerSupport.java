@@ -996,8 +996,8 @@ public class ServerSupport implements VirtualMachineSupport {
         ArrayList<VirtualMachine> list = new ArrayList<VirtualMachine>();
 
         boolean moreData = true;
-        String baseTarget = "/servers/detail/";
-        String target = "";
+        String baseTarget = "/servers/";
+        String target = "?fields=uuid,status";
 
         while(moreData)  {
             //dmayne 20130218: JSON Parsing
