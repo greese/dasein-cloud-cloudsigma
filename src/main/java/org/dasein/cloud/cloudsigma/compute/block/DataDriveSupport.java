@@ -565,15 +565,6 @@ public class DataDriveSupport extends AbstractVolumeSupport {
                     logger.warn("DEBUG: Unknown drive state for CloudSigma: " + s);
                 }
             }
-            if (VolumeState.AVAILABLE.equals(state)) {
-                //todo: dmayne 20130305: not implemented by cloudsigma yet
-                if (drive.has("imaging")){
-                    s = drive.getString("imaging");
-                }
-                if (s != null) {
-                    state = VolumeState.PENDING;
-                }
-            }
             return new ResourceStatus(id, state);
         }
         catch (JSONException e) {

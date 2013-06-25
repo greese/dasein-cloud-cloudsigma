@@ -1093,13 +1093,6 @@ public class BootDriveSupport extends AbstractImageSupport {
             return null;
         }
         try {
-            if (drive.has("claimed")) {
-                String id = drive.getString("claimed");
-
-                if (id != null && !id.trim().equals("") && !id.contains("imaging")) {
-                    return null;
-                }
-            }
             ProviderContext ctx = provider.getContext();
 
             if (ctx == null) {
