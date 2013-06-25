@@ -243,7 +243,9 @@ public class ServerSupport extends AbstractVMSupport {
         long timeout = System.currentTimeMillis() + (CalendarWrapper.MINUTE * 20L);
 
         if (!VmState.STOPPED.equals(vm.getCurrentState())) {
-            stop(vmId);
+            throw new CloudException("Server must be stopped before making clone");
+        }
+         /*   stop(vmId);
             while (timeout > System.currentTimeMillis()) {
                 if (vm == null || VmState.TERMINATED.equals(vm.getCurrentState())) {
                     throw new CloudException("Virtual machine terminated during stop for cloning");
@@ -260,7 +262,7 @@ public class ServerSupport extends AbstractVMSupport {
                 } catch (Exception ignore) {
                 }
             }
-        }
+        }  */
         try {
             //dmayne 20130222: api 2.0 uses empty body for server clone
 

@@ -20,8 +20,7 @@
 package org.dasein.cloud.cloudsigma.compute.image;
 
 import com.sun.servicetag.SystemEnvironment;
-import org.dasein.cloud.compute.AbstractImageSupport;
-import org.dasein.cloud.compute.ImageFilterOptions;
+import org.dasein.cloud.compute.*;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -38,15 +37,6 @@ import org.dasein.cloud.cloudsigma.CloudSigma;
 import org.dasein.cloud.cloudsigma.CloudSigmaConfigurationException;
 import org.dasein.cloud.cloudsigma.CloudSigmaMethod;
 import org.dasein.cloud.cloudsigma.NoContextException;
-import org.dasein.cloud.compute.Architecture;
-import org.dasein.cloud.compute.ImageClass;
-import org.dasein.cloud.compute.ImageCreateOptions;
-import org.dasein.cloud.compute.MachineImage;
-import org.dasein.cloud.compute.MachineImageFormat;
-import org.dasein.cloud.compute.MachineImageState;
-import org.dasein.cloud.compute.MachineImageType;
-import org.dasein.cloud.compute.Platform;
-import org.dasein.cloud.compute.VirtualMachine;
 import org.dasein.cloud.identity.ServiceAction;
 import org.dasein.util.uom.storage.Storage;
 
@@ -193,7 +183,10 @@ public class BootDriveSupport extends AbstractImageSupport {
             if (vm == null) {
                 throw new CloudException("Virtual machine not found: " + options.getVirtualMachineId());
             }
-            provider.getComputeServices().getVirtualMachineSupport().stop(options.getVirtualMachineId());
+            if (!VmState.STOPPED.equals(vm.getCurrentState())) {
+                throw new CloudException("Server must be stopped before making an image of it");
+            }
+           // provider.getComputeServices().getVirtualMachineSupport().stop(options.getVirtualMachineId());
             String driveId = vm.getProviderMachineImageId();
 
             try {
@@ -226,13 +219,13 @@ public class BootDriveSupport extends AbstractImageSupport {
             catch (JSONException e) {
                 throw new InternalException(e);
             }
-            finally {
+            /*finally {
                 try {
                     provider.getComputeServices().getVirtualMachineSupport().start(options.getVirtualMachineId());
                 } catch (Throwable ignore) {
                     logger.warn("Failed to restart " + options.getVirtualMachineId() + " after drive cloning");
                 }
-            }
+            } */
         } finally {
             provider.release();
         }
