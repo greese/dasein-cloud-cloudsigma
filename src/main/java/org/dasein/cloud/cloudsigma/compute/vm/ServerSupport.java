@@ -237,6 +237,9 @@ public class ServerSupport implements VirtualMachineSupport {
         long timeout = System.currentTimeMillis() + (CalendarWrapper.MINUTE * 20L);
 
         if (!VmState.STOPPED.equals(vm.getCurrentState())) {
+            throw new CloudException("Server must be stopped before making change");
+        }
+        /*if (!VmState.STOPPED.equals(vm.getCurrentState())) {
             stop(vmId);
             while (timeout > System.currentTimeMillis()) {
                 if (vm == null || VmState.TERMINATED.equals(vm.getCurrentState())) {
@@ -254,7 +257,7 @@ public class ServerSupport implements VirtualMachineSupport {
                 } catch (Exception ignore) {
                 }
             }
-        }
+        }   */
         try {
             //dmayne 20130222: api 2.0 uses empty body for server clone
 
