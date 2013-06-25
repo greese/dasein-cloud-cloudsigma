@@ -106,15 +106,10 @@ public class CloudSigmaMethod {
         //dmayne 20130218: use JSON parsing rather than plain text
         body = body.trim();
         if (body.length() > 0) {
-            logger.error("about to serialise");
             try {
                 JSONObject obj = new JSONObject(body);
-                logger.error("serialised");
                 if (obj != null) {
-                    logger.error("real object about to be converted");
                     JSONObject json = (JSONObject) obj;
-                    logger.error("json object created");
-                    logger.info("json object created");
                     return json.getString(key);
 
                 }

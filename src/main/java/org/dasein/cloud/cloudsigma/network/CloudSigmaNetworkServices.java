@@ -20,6 +20,7 @@
 package org.dasein.cloud.cloudsigma.network;
 
 import org.dasein.cloud.cloudsigma.CloudSigma;
+import org.dasein.cloud.cloudsigma.network.firewall.ServerFirewallSupport;
 import org.dasein.cloud.cloudsigma.network.ip.StaticIPSupport;
 import org.dasein.cloud.cloudsigma.network.vlan.ServerVLANSupport;
 import org.dasein.cloud.network.AbstractNetworkServices;
@@ -46,5 +47,10 @@ public class CloudSigmaNetworkServices extends AbstractNetworkServices {
     @Override
     public @Nonnull ServerVLANSupport getVlanSupport() {
         return new ServerVLANSupport(provider);
+    }
+
+    @Override
+    public @Nonnull ServerFirewallSupport getFirewallSupport() {
+        return new ServerFirewallSupport(provider);
     }
 }
