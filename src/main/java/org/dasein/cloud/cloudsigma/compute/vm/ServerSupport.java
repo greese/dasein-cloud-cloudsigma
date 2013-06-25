@@ -1180,9 +1180,9 @@ public class ServerSupport implements VirtualMachineSupport {
             }
 
             if (force) {
-                method.postString(toServerURL(vmId, "action/?do=shutdown"), "");
-            } else {
                 method.postString(toServerURL(vmId, "action/?do=stop"), "");
+            } else {
+                method.postString(toServerURL(vmId, "action/?do=shutdown"), "");
             }
             //dmayne 20130528: wait for server to be stopped
             // as some activities require this state before continuing
