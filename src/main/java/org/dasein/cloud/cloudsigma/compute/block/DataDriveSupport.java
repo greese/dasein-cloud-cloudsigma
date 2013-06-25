@@ -213,8 +213,8 @@ public class DataDriveSupport extends AbstractVolumeSupport {
         CloudSigmaMethod method = new CloudSigmaMethod(provider);
 
         boolean moreData = true;
-        String baseTarget = "/drives/detail/";
-        String target = "";
+        String baseTarget = "/drives";
+        String target = "/?fields=uuid,meta,name,status";
 
         while(moreData)  {
             //dmayne 20130218: JSON Parsing

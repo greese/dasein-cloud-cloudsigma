@@ -881,8 +881,8 @@ public class ServerSupport extends AbstractVMSupport {
         ArrayList<ResourceStatus> list = new ArrayList<ResourceStatus>();
 
         boolean moreData = true;
-        String baseTarget = "/servers/detail/";
-        String target = "";
+        String baseTarget = "/servers";
+        String target = "/?fields=uuid,status";
 
         while(moreData)  {
             //dmayne 20130218: JSON Parsing

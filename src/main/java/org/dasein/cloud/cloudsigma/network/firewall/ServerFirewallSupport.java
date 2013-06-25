@@ -259,7 +259,7 @@ public class ServerFirewallSupport extends AbstractFirewallSupport {
 
         boolean moreData = true;
         String baseTarget = "/fwpolicies/";
-        String target = "";
+        String target = "?fields=uuid";
 
         while(moreData)  {
             target = baseTarget+target;
