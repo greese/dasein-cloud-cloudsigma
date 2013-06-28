@@ -182,9 +182,7 @@ public class StaticIPSupport implements IpAddressSupport {
 
             while(moreData)  {
                 //dmayne 20130218: JSON Parsing
-                logger.debug("Target "+target);
                 target = baseTarget+target;
-                logger.debug("final target "+target);
 
                 JSONObject pool = method.list(target);
 
@@ -206,17 +204,11 @@ public class StaticIPSupport implements IpAddressSupport {
 
                     //dmayne 20130314: check if there are more pages
                     if (pool.has("meta")) {
-                        logger.debug("Found meta tag");
                         JSONObject meta = pool.getJSONObject("meta");
 
-                        logger.debug("Number of objects "+addresses.size()+" out of "+meta.getString("total_count"));
-
                         if (meta.has("next") && !(meta.isNull("next")) && !meta.getString("next").equals("")) {
-                            logger.debug("Found new page "+meta.getString("next"));
                             target = meta.getString("next");
-                            logger.debug("target "+target);
                             target = target.substring(target.indexOf("?"));
-                            logger.debug("new target "+target);
                             moreData = true;
                         }
                         else  {
@@ -241,14 +233,11 @@ public class StaticIPSupport implements IpAddressSupport {
             CloudSigmaMethod method = new CloudSigmaMethod(provider);
 
             boolean moreData = true;
-            String baseTarget = "/ips/detail/";
-            String target = "";
+            String baseTarget = "/ips/";
+            String target = "?fields=uuid,server";
 
             while(moreData)  {
-                //dmayne 20130218: JSON Parsing
-                logger.debug("Target "+target);
                 target = baseTarget+target;
-                logger.debug("final target "+target);
 
                 JSONObject pool = method.list(target);
 
@@ -270,17 +259,11 @@ public class StaticIPSupport implements IpAddressSupport {
 
                     //dmayne 20130314: check if there are more pages
                     if (pool.has("meta")) {
-                        logger.debug("Found meta tag");
                         JSONObject meta = pool.getJSONObject("meta");
 
-                        logger.debug("Number of objects "+addresses.size()+" out of "+meta.getString("total_count"));
-
                         if (meta.has("next") && !(meta.isNull("next")) && !meta.getString("next").equals("")) {
-                            logger.debug("Found new page "+meta.getString("next"));
                             target = meta.getString("next");
-                            logger.debug("target "+target);
                             target = target.substring(target.indexOf("?"));
-                            logger.debug("new target "+target);
                             moreData = true;
                         }
                         else  {

@@ -213,8 +213,8 @@ public class DataDriveSupport extends AbstractVolumeSupport {
         CloudSigmaMethod method = new CloudSigmaMethod(provider);
 
         boolean moreData = true;
-        String baseTarget = "/drives/detail/";
-        String target = "";
+        String baseTarget = "/drives";
+        String target = "/?fields=uuid,meta,name,status";
 
         while(moreData)  {
             //dmayne 20130218: JSON Parsing
@@ -233,7 +233,8 @@ public class DataDriveSupport extends AbstractVolumeSupport {
                         //dmayne 20130522: check that we are looking at a volume
                         //(will not have an image_type attribute)
                         JSONObject metadata = jVolume.getJSONObject("meta");
-                        if (!metadata.has("image_type")) {
+                        String name = jVolume.getString("name");
+                        if (!metadata.has("image_type") && !name.startsWith("esimg-")) {
                             ResourceStatus volume = toStatus(jVolume);
 
                             if (volume != null) {
@@ -292,7 +293,8 @@ public class DataDriveSupport extends AbstractVolumeSupport {
                         //dmayne 20130522: check that we are looking at a volume
                         //(will not have an image_type attribute)
                         JSONObject metadata = jVolume.getJSONObject("meta");
-                        if (!metadata.has("image_type")) {
+                        String name = jVolume.getString("name");
+                        if (!metadata.has("image_type") && !name.startsWith("esimg-")) {
                             Volume volume = toVolume(jVolume);
 
                             if (volume != null) {
@@ -561,15 +563,6 @@ public class DataDriveSupport extends AbstractVolumeSupport {
                     state = VolumeState.PENDING;
                 } else {
                     logger.warn("DEBUG: Unknown drive state for CloudSigma: " + s);
-                }
-            }
-            if (VolumeState.AVAILABLE.equals(state)) {
-                //todo: dmayne 20130305: not implemented by cloudsigma yet
-                if (drive.has("imaging")){
-                    s = drive.getString("imaging");
-                }
-                if (s != null) {
-                    state = VolumeState.PENDING;
                 }
             }
             return new ResourceStatus(id, state);

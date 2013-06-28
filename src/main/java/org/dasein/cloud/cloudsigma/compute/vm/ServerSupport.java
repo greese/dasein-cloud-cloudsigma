@@ -91,13 +91,6 @@ public class ServerSupport extends AbstractVMSupport {
                 throw new CloudException("No such virtual machine: " + serverId);
             }
 
-            //check if server needs to be stopped before making changes
-            if (!vm.getCurrentState().equals(VmState.STOPPED)) {
-                stop(vm.getProviderVirtualMachineId());
-                waitForState(vm, CalendarWrapper.MINUTE * 5L, VmState.STOPPED);
-                obj = method.getString(toServerURL(serverId, ""));
-            }
-
             JSONObject server = new JSONObject(obj);
             JSONArray nics = server.getJSONArray("nics");
 
@@ -140,13 +133,6 @@ public class ServerSupport extends AbstractVMSupport {
                 throw new CloudException("Virtual machine " + serverId + " does not exist");
             }
 
-            //check if server needs to be stopped before making changes
-            if (!vm.getCurrentState().equals(VmState.STOPPED)) {
-                stop(vm.getProviderVirtualMachineId());
-                waitForState(vm, CalendarWrapper.MINUTE * 5L, VmState.STOPPED);
-                obj = method.getString(toServerURL(serverId, ""));
-            }
-
             JSONObject server = new JSONObject(obj);
             JSONArray drives = server.getJSONArray("drives");
 
@@ -154,20 +140,7 @@ public class ServerSupport extends AbstractVMSupport {
             //todo remove hardcoded values
             newDrive.put("boot_order", drives.length()+1);
             newDrive.put("device", "virtio");
-            // deviceId is always not null here
-            //if (deviceId != null) {
-                newDrive.put("dev_channel", deviceId);
-            //}
-            //else {
-              //  if (drives.length() < 10) {
-                //    newDrive.put("dev_channel", "0:"+drives.length());
-                //} else if (drives.length() < 100) {
-                  //  newDrive.put("dev_channel", (drives.length()/10)+":"+(drives.length()%10));
-                //}
-                //else {
-                  //  throw new CloudException("Maximum drives attached to server "+vm.getProviderVirtualMachineId());
-                //}
-            //}
+            newDrive.put("dev_channel", deviceId);
             newDrive.put("drive", volume.getProviderVolumeId());
 
             drives.put(newDrive);
@@ -185,10 +158,12 @@ public class ServerSupport extends AbstractVMSupport {
             logger.trace("ENTER - " + ServerSupport.class.getName() + ".change(" + vm + "," + body + ")");
         }
         try {
-            boolean restart = !VmState.STOPPED.equals(vm.getCurrentState());
+            if (!VmState.STOPPED.equals(vm.getCurrentState())) {
+                throw new CloudException("Server must be stopped before making change");
+            }
             VirtualMachine workingVm = vm;
 
-            if (restart) {
+            /*if (restart) {
                 if (logger.isInfoEnabled()) {
                     logger.info("Virtual machine " + vm.getProviderVirtualMachineId() + " needs to be stopped prior to change");
                 }
@@ -204,7 +179,7 @@ public class ServerSupport extends AbstractVMSupport {
                 if (logger.isInfoEnabled()) {
                     logger.info("Done waiting for " + vm.getProviderVirtualMachineId() + ": " + workingVm.getCurrentState());
                 }
-            }
+            }*/
             CloudSigmaMethod method = new CloudSigmaMethod(provider);
 
             if (logger.isInfoEnabled()) {
@@ -217,7 +192,7 @@ public class ServerSupport extends AbstractVMSupport {
             if (logger.isInfoEnabled()) {
                 logger.info("Change to " + vm.getProviderVirtualMachineId() + " succeeded");
             }
-            if (restart) {
+            /*if (restart) {
                 if (logger.isInfoEnabled()) {
                     logger.info("Restarting " + vm.getProviderVirtualMachineId());
                 }
@@ -243,7 +218,7 @@ public class ServerSupport extends AbstractVMSupport {
                 t.setName("Restart CloudSigma VM " + id);
                 t.setDaemon(true);
                 t.start();
-            }
+            }*/
         } finally {
             if (logger.isTraceEnabled()) {
                 logger.trace("EXIT - " + ServerSupport.class.getName() + ".change()");
@@ -268,7 +243,9 @@ public class ServerSupport extends AbstractVMSupport {
         long timeout = System.currentTimeMillis() + (CalendarWrapper.MINUTE * 20L);
 
         if (!VmState.STOPPED.equals(vm.getCurrentState())) {
-            stop(vmId);
+            throw new CloudException("Server must be stopped before making clone");
+        }
+         /*   stop(vmId);
             while (timeout > System.currentTimeMillis()) {
                 if (vm == null || VmState.TERMINATED.equals(vm.getCurrentState())) {
                     throw new CloudException("Virtual machine terminated during stop for cloning");
@@ -285,7 +262,7 @@ public class ServerSupport extends AbstractVMSupport {
                 } catch (Exception ignore) {
                 }
             }
-        }
+        }  */
         try {
             //dmayne 20130222: api 2.0 uses empty body for server clone
 
@@ -384,13 +361,6 @@ public class ServerSupport extends AbstractVMSupport {
 
             if (vm == null) {
                 throw new CloudException("No such virtual machine: " + serverId);
-            }
-
-            //check if server needs to be stopped before making changes
-            if (!vm.getCurrentState().equals(VmState.STOPPED)) {
-                stop(vm.getProviderVirtualMachineId());
-                waitForState(vm, CalendarWrapper.MINUTE * 5L, VmState.STOPPED);
-                obj = method.getString(toServerURL(serverId, ""));
             }
 
             String driveId = volume.getProviderVolumeId();
@@ -554,7 +524,7 @@ public class ServerSupport extends AbstractVMSupport {
 
     @Override
     public boolean isSubscribed() throws CloudException, InternalException {
-        getVirtualMachine("---no such id---");
+        listVirtualMachines();
         return true;
     }
 
@@ -722,6 +692,17 @@ public class ServerSupport extends AbstractVMSupport {
                     JSONObject newIP = new JSONObject();
                     newIP.put("conf", "dhcp");
                     newNic.put("ip_v4_conf", newIP);
+
+                    //firewall support
+                    if (withLaunchOptions.getFirewallIds() != null) {
+                        if (withLaunchOptions.getFirewallIds().length == 1) {
+                            newNic.put("firewall_policy", withLaunchOptions.getFirewallIds()[0]);
+                        }
+                        else {
+                            logger.warn("Firewall not applied to server as there is more than one - current list has "+withLaunchOptions.getFirewallIds().length);
+                        }
+                    }
+
                     nics.put(newNic);
                     newServer.put("nics", nics);
                 }
@@ -842,6 +823,19 @@ public class ServerSupport extends AbstractVMSupport {
         }
     }
 
+    @Override
+    public @Nonnull Iterable<String> listFirewalls(@Nonnull String vmId) throws InternalException, CloudException {
+        VirtualMachine vm = getVirtualMachine(vmId);
+
+        String[] firewalls = vm.getProviderFirewallIds();
+        ArrayList<String> list = new ArrayList<String>();
+
+        for (int i= 0; i<firewalls.length; i++) {
+           list.add(firewalls[i]);
+        }
+        return list;
+    }
+
     private transient ArrayList<VirtualMachineProduct> cachedProducts;
 
     @Override
@@ -887,8 +881,8 @@ public class ServerSupport extends AbstractVMSupport {
         ArrayList<ResourceStatus> list = new ArrayList<ResourceStatus>();
 
         boolean moreData = true;
-        String baseTarget = "/servers/detail/";
-        String target = "";
+        String baseTarget = "/servers";
+        String target = "/?fields=uuid,status";
 
         while(moreData)  {
             //dmayne 20130218: JSON Parsing
@@ -1037,13 +1031,6 @@ public class ServerSupport extends AbstractVMSupport {
                 throw new CloudException("No such virtual machine: " + serverId);
             }
 
-            //check if server needs to be stopped before making changes
-            if (!vm.getCurrentState().equals(VmState.STOPPED)) {
-                stop(vm.getProviderVirtualMachineId());
-                waitForState(vm, CalendarWrapper.MINUTE * 5L, VmState.STOPPED);
-                obj = method.getString(toServerURL(serverId, ""));
-            }
-
             JSONObject json = new JSONObject(obj);
             JSONArray nics = json.getJSONArray("nics");
             JSONArray newArray = new JSONArray();
@@ -1089,6 +1076,17 @@ public class ServerSupport extends AbstractVMSupport {
             if( e.getMessage().contains("Cannot start guest in state") ) {
                 return;
             }
+            if (e.getHttpCode() == 402) {
+                //dmayne 20130603: if error is payment/billing related check for software licenses
+                VirtualMachine vm = getVirtualMachine(vmId);
+                MachineImage image = provider.getComputeServices().getImageSupport().getImage(vm.getProviderMachineImageId());
+                if (image.getSoftware() != null) {
+                    throw new CloudException("Unable to start server - it is associated with a software license which does not have a paid subscription.");
+                }
+                else {
+                    throw new CloudException("Unable to start server - payment required./nPlease check your account subscription and balance");
+                }
+            }
             throw e;
         }
     }
@@ -1113,9 +1111,9 @@ public class ServerSupport extends AbstractVMSupport {
             }
 
             if (force) {
-                method.postString(toServerURL(vmId, "action/?do=shutdown"), "");
-            } else {
                 method.postString(toServerURL(vmId, "action/?do=stop"), "");
+            } else {
+                method.postString(toServerURL(vmId, "action/?do=shutdown"), "");
             }
             //dmayne 20130528: wait for server to be stopped
             // as some activities require this state before continuing
@@ -1408,6 +1406,7 @@ public class ServerSupport extends AbstractVMSupport {
             }
 
             TreeSet<String> allIps = new TreeSet<String>();
+            ArrayList<String> firewallIds = new ArrayList<String>();
             if (nics != null) {
                 for (int i=0; i < nics.length(); i++) {
                     //todo:dmayne 20130218: will a server ever have both ipv4 and ipv6?
@@ -1485,11 +1484,30 @@ public class ServerSupport extends AbstractVMSupport {
                                 }
                         }
                     }
+
+                    //check for firewall policy
+                    if (jnic.has("firewall_policy") && !jnic.isNull("firewall_policy")) {
+                        JSONObject fw = jnic.getJSONObject("firewall_policy");
+                        if (fw.has("uuid") && !fw.isNull("uuid")) {
+                            String firewall = fw.getString("uuid");
+                            logger.debug("adding firewall policy "+firewall+" to server "+vm.getProviderVirtualMachineId());
+                            firewallIds.add(firewall);
+                        }
+                    }
                 }
             }
             if (!allIps.isEmpty()) {
                 setIP(vm, allIps);
             }
+
+            if (!firewallIds.isEmpty()) {
+                String[] vmFirewalls = new String[firewallIds.size()];
+                for (int i = 0; i<firewallIds.size(); i++) {
+                    vmFirewalls[i] = firewallIds.get(i);
+                }
+                vm.setProviderFirewallIds(vmFirewalls);
+            }
+
             JSONObject owner = object.getJSONObject("owner");
             String user = owner.getString("uuid");
             vm.setProviderOwnerId(user);
