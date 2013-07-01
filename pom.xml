@@ -3,7 +3,7 @@
   
   <groupId>org.dasein</groupId>
   <artifactId>dasein-cloud-cloudsigma</artifactId>
-  <version>2013.02.3-SNAPSHOT</version>
+  <version>2013.02.5-SNAPSHOT</version>
   
   <name>Dasein Cloud CloudSigma</name>
   <description>Dasein Cloud implementation for the CloudSigma cloud</description>
@@ -201,6 +201,7 @@
           <excludes>
              <exclude>**/TestSuite.java</exclude>
           </excludes>
+          <!--  <argLine>-Ddasein.inclusions=VirtualMachineTestCase</argLine> -->
         </configuration>
       </plugin> 
       <plugin>
