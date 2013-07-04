@@ -201,6 +201,7 @@
           <excludes>
              <exclude>**/TestSuite.java</exclude>
           </excludes>
+          <!--  <argLine>-Ddasein.inclusions=VirtualMachineTestCase</argLine> -->
         </configuration>
       </plugin> 
       <plugin>
