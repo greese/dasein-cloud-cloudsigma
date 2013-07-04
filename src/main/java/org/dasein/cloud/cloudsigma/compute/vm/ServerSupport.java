@@ -1099,26 +1099,15 @@ public class ServerSupport extends AbstractVMSupport {
         try {
             CloudSigmaMethod method = new CloudSigmaMethod(provider);
 
-            //dmayne 20130227: check that vm is started before trying to stop
-            try {
-                VirtualMachine before = getVirtualMachine(vmId);
-                if (before == null || VmState.TERMINATED.equals(before.getCurrentState()) || VmState.STOPPED.equals(before.getCurrentState()) || VmState.STOPPING.equals(before.getCurrentState())) {
-                    return;
-                }
-                waitForState(before, (CalendarWrapper.MINUTE * 5L), VmState.RUNNING);
-            } catch (Throwable ignore) {
-                logger.error("Error while getting vm: " + vmId);
-            }
-
             if (force) {
                 method.postString(toServerURL(vmId, "action/?do=stop"), "");
             } else {
                 method.postString(toServerURL(vmId, "action/?do=shutdown"), "");
+                VirtualMachine v = waitForState(getVirtualMachine(vmId),CalendarWrapper.MINUTE * 5L, VmState.STOPPED, VmState.RUNNING);
+                if (!v.getCurrentState().equals(VmState.STOPPED)) {
+                    stop(vmId, true);
+                }
             }
-            //dmayne 20130528: wait for server to be stopped
-            // as some activities require this state before continuing
-            VirtualMachine after = getVirtualMachine(vmId);
-            waitForState(after, (CalendarWrapper.MINUTE * 5L), VmState.STOPPED);
         } finally {
             if (logger.isTraceEnabled()) {
                 logger.trace("EXIT - " + ServerSupport.class.getName() + ".stop()");
