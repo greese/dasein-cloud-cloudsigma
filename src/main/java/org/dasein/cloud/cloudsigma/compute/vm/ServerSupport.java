@@ -541,7 +541,8 @@ public class ServerSupport implements VirtualMachineSupport {
 
     @Override
     public boolean isSubscribed() throws CloudException, InternalException {
-        listVirtualMachines();
+        CloudSigmaMethod method = new CloudSigmaMethod(provider);
+        method.list("/servers");
         return true;
     }
 
