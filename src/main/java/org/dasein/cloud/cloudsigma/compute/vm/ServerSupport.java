@@ -571,15 +571,26 @@ public class ServerSupport extends AbstractVMSupport {
                 throw new CloudException("No such machine image: " + withLaunchOptions.getMachineImageId());
             }
 
-            String media = img.getTag("media").toString();
-
-            if (logger.isInfoEnabled()) {
-                logger.info("Cloning drive from machine image " + img.getProviderMachineImageId() + "...");
+            MachineImageState state = img.getCurrentState();
+            String name = img.getName();
+            boolean cloneFound = false;
+            if (state.equals(MachineImageState.ACTIVE) && name.contains("clone")) {
+                logger.info("Available 'clone' - will attach directly to new server");
+                cloneFound = true;
             }
+            else {
+                logger.info("Image is either mounted or is not a clone - cloning drive from machine image "+ img.getProviderMachineImageId());
+            }
+
+            String media = img.getTag("media").toString();
 
             String imageDriveId = null;
             //dmayne 20130529: cdrom does not need to be cloned and can be attached directly
-            if (!media.equals("cdrom")) {
+            if (!media.equals("cdrom") && !cloneFound) {
+                if (logger.isInfoEnabled()) {
+                    logger.info("Cloning drive from machine image " + img.getProviderMachineImageId() + "...");
+                }
+
                 JSONObject drive = provider.getComputeServices().getImageSupport().cloneDrive(withLaunchOptions.getMachineImageId(), withLaunchOptions.getHostName(), null);
 
                 if (logger.isDebugEnabled()) {
@@ -845,9 +856,9 @@ public class ServerSupport extends AbstractVMSupport {
         if (products == null) {
             products = new ArrayList<VirtualMachineProduct>();
 
-            for (int ram : new int[]{512, 1024, 2048, 4096, 8192, 12288, 16384, 20480, 24576, 28668, 32768}) {
-                for (int cpu : new int[]{1000, 1200, 1500, 2000, 2500, 3000, 4000, 5000, 6000, 7000, 8000, 9000, 10000, 12000, 14000, 16000, 18000, 20000}) {
-                    for (int cpuCount : new int[]{1, 2, 4, 8}) {
+            for (int ram : new int[]{1024, 2048, 4096, 8192, 12288, 16384, 20480, 24576, 28668, 32768}) {
+                for (int cpu : new int[]{1000, 1200, 1500, 2000}) {
+                    for (int cpuCount : new int[]{1, 2, 4, 8, 12}) {
                         if (cpuCount == 1) {
                             products.add(getProduct(ram + ":" + cpu));
                         } else {
