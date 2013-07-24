@@ -723,7 +723,7 @@ public class ServerSupport implements VirtualMachineSupport {
                     newNic.put("ip_v4_conf", newIP);
 
                     //firewall support
-                    if (withLaunchOptions.getFirewallIds() != null) {
+                    if (withLaunchOptions.getFirewallIds() != null && withLaunchOptions.getFirewallIds().length > 0) {
                         if (withLaunchOptions.getFirewallIds().length == 1) {
                             newNic.put("firewall_policy", withLaunchOptions.getFirewallIds()[0]);
                         }
