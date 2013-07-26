@@ -57,6 +57,13 @@ public class ServerFirewallSupport extends AbstractFirewallSupport {
     @Nonnull
     @Override
     public String authorize(@Nonnull String firewallId, @Nonnull Direction direction, @Nonnull Permission permission, @Nonnull RuleTarget sourceEndpoint, @Nonnull Protocol protocol, @Nonnull RuleTarget destinationEndpoint, int beginPort, int endPort, @Nonnegative int precedence) throws CloudException, InternalException {
+        if (sourceEndpoint.getRuleTargetType() != RuleTargetType.CIDR) {
+            throw new OperationNotSupportedException("Target type "+sourceEndpoint.getRuleTargetType()+" for sourceEndpoint not supported in CloudSigma");
+        }
+        if (destinationEndpoint.getRuleTargetType() != RuleTargetType.CIDR) {
+            throw new OperationNotSupportedException("Target type "+destinationEndpoint.getRuleTargetType()+" for destinationEndpoint not supported in CloudSigma");
+        }
+
         CloudSigmaMethod method = new CloudSigmaMethod(provider);
 
         try{
