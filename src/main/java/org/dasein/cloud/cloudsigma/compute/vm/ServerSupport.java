@@ -158,12 +158,13 @@ public class ServerSupport extends AbstractVMSupport {
             logger.trace("ENTER - " + ServerSupport.class.getName() + ".change(" + vm + "," + body + ")");
         }
         try {
+            boolean restart = false;
             if (!VmState.STOPPED.equals(vm.getCurrentState())) {
-                throw new CloudException("Server must be stopped before making change");
+                restart = true;
             }
             VirtualMachine workingVm = vm;
 
-            /*if (restart) {
+            if (restart) {
                 if (logger.isInfoEnabled()) {
                     logger.info("Virtual machine " + vm.getProviderVirtualMachineId() + " needs to be stopped prior to change");
                 }
@@ -179,7 +180,7 @@ public class ServerSupport extends AbstractVMSupport {
                 if (logger.isInfoEnabled()) {
                     logger.info("Done waiting for " + vm.getProviderVirtualMachineId() + ": " + workingVm.getCurrentState());
                 }
-            }*/
+            }
             CloudSigmaMethod method = new CloudSigmaMethod(provider);
 
             if (logger.isInfoEnabled()) {
@@ -192,7 +193,7 @@ public class ServerSupport extends AbstractVMSupport {
             if (logger.isInfoEnabled()) {
                 logger.info("Change to " + vm.getProviderVirtualMachineId() + " succeeded");
             }
-            /*if (restart) {
+            if (restart) {
                 if (logger.isInfoEnabled()) {
                     logger.info("Restarting " + vm.getProviderVirtualMachineId());
                 }
@@ -218,7 +219,7 @@ public class ServerSupport extends AbstractVMSupport {
                 t.setName("Restart CloudSigma VM " + id);
                 t.setDaemon(true);
                 t.start();
-            }*/
+            }
         } finally {
             if (logger.isTraceEnabled()) {
                 logger.trace("EXIT - " + ServerSupport.class.getName() + ".change()");
@@ -706,7 +707,7 @@ public class ServerSupport extends AbstractVMSupport {
                     newNic.put("ip_v4_conf", newIP);
 
                     //firewall support
-                    if (withLaunchOptions.getFirewallIds() != null) {
+                    if (withLaunchOptions.getFirewallIds() != null && withLaunchOptions.getFirewallIds().length > 0) {
                         if (withLaunchOptions.getFirewallIds().length == 1) {
                             newNic.put("firewall_policy", withLaunchOptions.getFirewallIds()[0]);
                         }
@@ -1148,7 +1149,7 @@ public class ServerSupport extends AbstractVMSupport {
     }
 
     @Override
-    public void terminate(@Nonnull String vmId) throws InternalException, CloudException {
+    public void terminate(@Nonnull String vmId, @Nullable String explanation) throws InternalException, CloudException {
         VirtualMachine vm = getVirtualMachine(vmId);
 
         if (vm == null) {
@@ -1532,6 +1533,7 @@ public class ServerSupport extends AbstractVMSupport {
             if (status != null) {
                 if (status.equalsIgnoreCase("stopped")) {
                     vm.setCurrentState(VmState.STOPPED);
+                    vm.setImagable(true);
                 } else if (status.equalsIgnoreCase("stopping")) {
                     vm.setCurrentState(VmState.STOPPING);
                 } else if (status.equalsIgnoreCase("started") || status.equalsIgnoreCase("running")) {

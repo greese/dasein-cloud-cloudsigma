@@ -69,7 +69,7 @@ public class ServerFirewallSupport extends AbstractFirewallSupport {
             rule.put("dst_ip", destinationEndpoint.getCidr());
             rule.put("dst_port", String.valueOf(beginPort)+((endPort >= 0 && endPort!=beginPort) ? ":"+String.valueOf(endPort) : ""));
             rule.put("ip_proto", (protocol == Protocol.TCP ? "tcp" : "udp"));
-            rule.put("src_ip", sourceEndpoint.getCidr());
+            rule.put("src_ip", sourceEndpoint.getCidr() );
             rules.put(rule);
 
             String firewallObj = method.putString(toFirewallURL(firewallId, ""), fw.toString());
@@ -308,7 +308,6 @@ public class ServerFirewallSupport extends AbstractFirewallSupport {
         if (!inVlan) {
             Collection<RuleTargetType> destTypes = new ArrayList<RuleTargetType>();
             destTypes.add(RuleTargetType.CIDR);
-            destTypes.add(RuleTargetType.GLOBAL);
             return destTypes;
         }
         return Collections.emptyList();
@@ -346,7 +345,6 @@ public class ServerFirewallSupport extends AbstractFirewallSupport {
         if (!inVlan) {
             Collection<RuleTargetType> sourceTypes = new ArrayList<RuleTargetType>();
             sourceTypes.add(RuleTargetType.CIDR);
-            sourceTypes.add(RuleTargetType.GLOBAL);
             return sourceTypes;
         }
         return Collections.emptyList();
