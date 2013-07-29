@@ -21,6 +21,7 @@ package org.dasein.cloud.cloudsigma.compute.image;
 
 import org.dasein.cloud.compute.*;
 import org.dasein.cloud.identity.ServiceAction;
+import org.dasein.util.CalendarWrapper;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -242,6 +243,21 @@ public class BootDriveSupport implements MachineImageSupport {
             if (!VmState.STOPPED.equals(vm.getCurrentState())) {
                 restart = true;
                 provider.getComputeServices().getVirtualMachineSupport().stop(options.getVirtualMachineId());
+                try {
+                    long timeout = System.currentTimeMillis() + (CalendarWrapper.MINUTE * 10L);
+                    vm = null;
+                    while (timeout > System.currentTimeMillis()) {
+                        vm =  provider.getComputeServices().getVirtualMachineSupport().getVirtualMachine(options.getVirtualMachineId());
+                        if (vm.getCurrentState().equals(VmState.STOPPED)) {
+                            System.out.println("Server stopped");
+                            break;
+                        }
+                        try { Thread.sleep(15000L); }
+                        catch( InterruptedException ignore ) { }
+                    }
+                }
+                catch (Throwable ignore) {
+                }
             }
             String driveId = vm.getProviderMachineImageId();
 
