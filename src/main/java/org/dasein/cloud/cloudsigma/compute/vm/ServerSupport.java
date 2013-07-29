@@ -152,12 +152,13 @@ public class ServerSupport implements VirtualMachineSupport {
             logger.trace("ENTER - " + ServerSupport.class.getName() + ".change(" + vm + "," + body + ")");
         }
         try {
+            boolean restart = false;
             if (!VmState.STOPPED.equals(vm.getCurrentState())) {
-                throw new CloudException("Server must be stopped before making change");
+                restart = true;
             }
             VirtualMachine workingVm = vm;
 
-           /* if (restart) {
+            if (restart) {
                 if (logger.isInfoEnabled()) {
                     logger.info("Virtual machine " + vm.getProviderVirtualMachineId() + " needs to be stopped prior to change");
                 }
@@ -173,7 +174,7 @@ public class ServerSupport implements VirtualMachineSupport {
                 if (logger.isInfoEnabled()) {
                     logger.info("Done waiting for " + vm.getProviderVirtualMachineId() + ": " + workingVm.getCurrentState());
                 }
-            } */
+            }
             CloudSigmaMethod method = new CloudSigmaMethod(provider);
 
             if (logger.isInfoEnabled()) {
@@ -186,7 +187,7 @@ public class ServerSupport implements VirtualMachineSupport {
             if (logger.isInfoEnabled()) {
                 logger.info("Change to " + vm.getProviderVirtualMachineId() + " succeeded");
             }
-            /*if (restart) {
+            if (restart) {
                 if (logger.isInfoEnabled()) {
                     logger.info("Restarting " + vm.getProviderVirtualMachineId());
                 }
@@ -212,7 +213,7 @@ public class ServerSupport implements VirtualMachineSupport {
                 t.setName("Restart CloudSigma VM " + id);
                 t.setDaemon(true);
                 t.start();
-            } */
+            }
         } finally {
             if (logger.isTraceEnabled()) {
                 logger.trace("EXIT - " + ServerSupport.class.getName() + ".change()");
@@ -1590,6 +1591,7 @@ public class ServerSupport implements VirtualMachineSupport {
             if (status != null) {
                 if (status.equalsIgnoreCase("stopped")) {
                     vm.setCurrentState(VmState.STOPPED);
+                    vm.setImagable(true);
                 } else if (status.equalsIgnoreCase("stopping")) {
                     vm.setCurrentState(VmState.STOPPING);
                 } else if (status.equalsIgnoreCase("started") || status.equalsIgnoreCase("running")) {

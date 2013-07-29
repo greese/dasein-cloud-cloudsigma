@@ -233,15 +233,16 @@ public class BootDriveSupport implements MachineImageSupport {
                 task.setStartTime(System.currentTimeMillis());
             }
             VirtualMachine vm;
+            boolean restart = false;
 
             vm = provider.getComputeServices().getVirtualMachineSupport().getVirtualMachine(options.getVirtualMachineId());
             if (vm == null) {
                 throw new CloudException("Virtual machine not found: " + options.getVirtualMachineId());
             }
             if (!VmState.STOPPED.equals(vm.getCurrentState())) {
-                throw new CloudException("Server must be stopped before making an image of it");
+                restart = true;
+                provider.getComputeServices().getVirtualMachineSupport().stop(options.getVirtualMachineId());
             }
-           // provider.getComputeServices().getVirtualMachineSupport().stop(options.getVirtualMachineId());
             String driveId = vm.getProviderMachineImageId();
 
             try {
@@ -274,13 +275,15 @@ public class BootDriveSupport implements MachineImageSupport {
             catch (JSONException e) {
                 throw new InternalException(e);
             }
-            /*finally {
-                try {
-                    provider.getComputeServices().getVirtualMachineSupport().start(options.getVirtualMachineId());
-                } catch (Throwable ignore) {
-                    logger.warn("Failed to restart " + options.getVirtualMachineId() + " after drive cloning");
+            finally {
+                if (restart) {
+                    try {
+                        provider.getComputeServices().getVirtualMachineSupport().start(options.getVirtualMachineId());
+                    } catch (Throwable ignore) {
+                        logger.warn("Failed to restart " + options.getVirtualMachineId() + " after drive cloning");
+                    }
                 }
-            } */
+            }
         } finally {
             provider.release();
         }
