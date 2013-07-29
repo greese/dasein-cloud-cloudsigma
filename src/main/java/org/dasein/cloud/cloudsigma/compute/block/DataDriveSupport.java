@@ -356,6 +356,18 @@ public class DataDriveSupport extends AbstractVolumeSupport {
         if (method.deleteString(toDriveURL(volumeId, ""), "") == null) {
             throw new CloudException("Unable to identify drives endpoint for removal");
         }
+
+        timeout = System.currentTimeMillis() + (CalendarWrapper.MINUTE * 5L);
+        v = getVolume(volumeId);
+        while( timeout > System.currentTimeMillis() ) {
+            if( v == null || VolumeState.DELETED.equals(v.getCurrentState())) {
+                return;
+            }
+            try { Thread.sleep(15000L); }
+            catch( InterruptedException ignore ) { }
+            try { v = getVolume(volumeId); }
+            catch( Throwable ignore ) { }
+        }
     }
 
     private @Nullable Volume toVolume(@Nullable JSONObject drive) throws CloudException, InternalException {
