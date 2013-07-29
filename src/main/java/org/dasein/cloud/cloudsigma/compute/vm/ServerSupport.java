@@ -168,7 +168,7 @@ public class ServerSupport extends AbstractVMSupport {
                 if (logger.isInfoEnabled()) {
                     logger.info("Virtual machine " + vm.getProviderVirtualMachineId() + " needs to be stopped prior to change");
                 }
-                stop(vm.getProviderVirtualMachineId());
+                stop(vm.getProviderVirtualMachineId(), false);
                 if (logger.isInfoEnabled()) {
                     logger.info("Waiting for " + vm.getProviderVirtualMachineId() + " to fully stop");
                 }
