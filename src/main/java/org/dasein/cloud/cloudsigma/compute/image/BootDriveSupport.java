@@ -645,7 +645,7 @@ public class BootDriveSupport extends AbstractImageSupport {
 
     @Override
     public @Nonnull Iterable<MachineImage> searchPublicImages(@Nonnull ImageFilterOptions options) throws InternalException, CloudException {
-        if( !ImageClass.MACHINE.equals(options.getImageClass()) ) {
+        if( options.getImageClass() != null && !ImageClass.MACHINE.equals(options.getImageClass()) ) {
             return Collections.emptyList();
         }
         ArrayList<MachineImage> matches = new ArrayList<MachineImage>();
