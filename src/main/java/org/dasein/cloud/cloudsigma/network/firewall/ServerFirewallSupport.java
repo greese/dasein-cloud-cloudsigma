@@ -76,10 +76,17 @@ public class ServerFirewallSupport extends AbstractFirewallSupport {
     @Nonnull
     @Override
     public String authorize(@Nonnull String firewallId, @Nonnull Direction direction, @Nonnull Permission permission, @Nonnull RuleTarget sourceEndpoint, @Nonnull Protocol protocol, @Nonnull RuleTarget destinationEndpoint, int beginPort, int endPort, @Nonnegative int precedence) throws CloudException, InternalException {
-        if (sourceEndpoint.getRuleTargetType() != RuleTargetType.CIDR) {
+        if (sourceEndpoint.getRuleTargetType().equals(RuleTargetType.GLOBAL)) {
+            sourceEndpoint = null;
+        }
+        else if (sourceEndpoint.getRuleTargetType() != RuleTargetType.CIDR) {
             throw new OperationNotSupportedException("Target type "+sourceEndpoint.getRuleTargetType()+" for sourceEndpoint not supported in CloudSigma");
         }
-        if (destinationEndpoint.getRuleTargetType() != RuleTargetType.CIDR) {
+
+        if (destinationEndpoint.getRuleTargetType().equals(RuleTargetType.GLOBAL)) {
+            destinationEndpoint = null;
+        }
+        else if (destinationEndpoint.getRuleTargetType() != RuleTargetType.CIDR) {
             throw new OperationNotSupportedException("Target type "+destinationEndpoint.getRuleTargetType()+" for destinationEndpoint not supported in CloudSigma");
         }
 
@@ -92,10 +99,14 @@ public class ServerFirewallSupport extends AbstractFirewallSupport {
             JSONObject rule = new JSONObject();
             rule.put("action", (permission == Permission.ALLOW ? "accept" : "drop"));
             rule.put("direction", (direction == Direction.INGRESS ? "in" : "out"));
-            rule.put("dst_ip", destinationEndpoint.getCidr());
+            if (destinationEndpoint != null) {
+                rule.put("dst_ip", destinationEndpoint.getCidr());
+            }
             rule.put("dst_port", String.valueOf(beginPort)+((endPort >= 0 && endPort!=beginPort) ? ":"+String.valueOf(endPort) : ""));
             rule.put("ip_proto", (protocol == Protocol.TCP ? "tcp" : "udp"));
-            rule.put("src_ip", sourceEndpoint.getCidr() );
+            if (sourceEndpoint != null) {
+                rule.put("src_ip", sourceEndpoint.getCidr() );
+            }
             rules.put(rule);
 
             String firewallObj = method.putString(toFirewallURL(firewallId, ""), fw.toString());
