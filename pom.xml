@@ -3,7 +3,7 @@
   
   <groupId>org.dasein</groupId>
   <artifactId>dasein-cloud-cloudsigma</artifactId>
-  <version>2013.07.2-SNAPSHOT</version>
+  <version>2013.07.2</version>
   
   <name>Dasein Cloud CloudSigma</name>
   <description>Dasein Cloud implementation for the CloudSigma cloud</description>
@@ -198,9 +198,9 @@
                     <value>${regionId}</value>
                 </property>
             </systemProperties>
-          <excludes>
-             <exclude>**/TestSuite.java</exclude>
-          </excludes>
+          <includes>
+             <include>**/TestSuite.java</include>
+          </includes>
             <!--  <argLine>-Ddasein.inclusions=StatefulFirewallTests</argLine>   -->
         </configuration>
       </plugin> 
