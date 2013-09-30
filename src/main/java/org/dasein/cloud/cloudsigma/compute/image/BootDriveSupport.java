@@ -824,11 +824,11 @@ public class BootDriveSupport extends AbstractImageSupport {
             String s = drive.getString("status");
 
             if (s != null) {
-                if( s.equalsIgnoreCase("mounted") || s.equalsIgnoreCase("copying") ) {
-                    image.setCurrentState(MachineImageState.PENDING);
-                }
-                else if( s.equalsIgnoreCase("unmounted") ) {
+                if( s.equalsIgnoreCase("unmounted")  || ( s.equals("mounted") && image.getName().contains("buntu") ) ) {
                     image.setCurrentState(MachineImageState.ACTIVE);
+                }
+                else if( s.equalsIgnoreCase("mounted") || s.equalsIgnoreCase("copying") ) {
+                    image.setCurrentState(MachineImageState.PENDING);
                 }
                 else if( s.equalsIgnoreCase("unavailable") ) {
                     image.setCurrentState(MachineImageState.DELETED);
@@ -1012,11 +1012,11 @@ public class BootDriveSupport extends AbstractImageSupport {
             String s = drive.getString("status");
 
             if (s != null) {
-                if( s.equalsIgnoreCase("copying") || s.equalsIgnoreCase("mounted")) {
-                    image.setCurrentState(MachineImageState.PENDING);
-                }
-                else if( s.equalsIgnoreCase("unmounted") ) {
+                if( s.equalsIgnoreCase("unmounted") || ( s.equals("mounted") && image.getName().contains("buntu") )) {
                     image.setCurrentState(MachineImageState.ACTIVE);
+                }
+                else if( s.equalsIgnoreCase("copying") || s.equalsIgnoreCase("mounted")) {
+                    image.setCurrentState(MachineImageState.PENDING);
                 }
                 else if( s.equalsIgnoreCase("unavailable") ) {
                     image.setCurrentState(MachineImageState.DELETED);
