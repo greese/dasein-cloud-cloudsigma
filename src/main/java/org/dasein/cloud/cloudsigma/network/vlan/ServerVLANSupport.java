@@ -340,9 +340,10 @@ public class ServerVLANSupport extends AbstractVLANSupport {
 
         boolean moreData = true;
         String baseTarget = "/vlans/";
-        String target = "?fields=uuid";
+        String target = "?limit=0&fields=uuid";
 
-        while(moreData)  {
+       // while(moreData)  {         - commented out as it seems paging is no longer supported
+       // but who knows when the api will change back again
             //dmayne 20130218: JSON Parsing
             target = baseTarget+target;
 
@@ -363,7 +364,8 @@ public class ServerVLANSupport extends AbstractVLANSupport {
                     }
                 }
 
-                //dmayne 20130314: check if there are more pages
+               /* //dmayne 20130314: check if there are more pages      - commented out as it seems paging is no longer supported
+                but who knows when the api will change back again
                 if (json.has("meta")) {
                     JSONObject meta = json.getJSONObject("meta");
 
@@ -375,12 +377,12 @@ public class ServerVLANSupport extends AbstractVLANSupport {
                     else  {
                         moreData = false;
                     }
-                }
+                }    */
             }
             catch (JSONException e) {
                 throw new InternalException(e);
             }
-        }
+       // }
         return networks;
     }
 
@@ -390,14 +392,13 @@ public class ServerVLANSupport extends AbstractVLANSupport {
         CloudSigmaMethod method = new CloudSigmaMethod(provider);
 
         boolean moreData = true;
-        String baseTarget = "/vlans/detail/";
+        String baseTarget = "/vlans/detail/?limit=0";
         String target = "";
 
-        while(moreData)  {
+       // while(moreData)  {                   - commented out as it seems paging is no longer supported
+        //but who knows when the api will change back again
             //dmayne 20130218: JSON Parsing
-            logger.debug("Target "+target);
             target = baseTarget+target;
-            logger.debug("final target "+target);
 
             try {
                 JSONObject json = method.list(target);
@@ -416,30 +417,25 @@ public class ServerVLANSupport extends AbstractVLANSupport {
                     }
                 }
 
-                //dmayne 20130314: check if there are more pages
+              /*  //dmayne 20130314: check if there are more pages      - commented out as it seems paging is no longer supported
+                but who knows when the api will change back again
                 if (json.has("meta")) {
-                    logger.debug("Found meta tag");
                     JSONObject meta = json.getJSONObject("meta");
 
-                    logger.debug("Number of objects "+networks.size()+" out of "+meta.getString("total_count"));
-
                     if (meta.has("next") && !(meta.isNull("next")) && !meta.getString("next").equals("")) {
-                        logger.debug("Found new page "+meta.getString("next"));
                         target = meta.getString("next");
-                        logger.debug("target "+target);
                         target = target.substring(target.indexOf("?"));
-                        logger.debug("new target "+target);
                         moreData = true;
                     }
                     else  {
                         moreData = false;
                     }
-                }
+                }  */
             }
             catch (JSONException e) {
                 throw new InternalException(e);
             }
-        }
+       // }
         return networks;
     }
 

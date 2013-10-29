@@ -895,9 +895,10 @@ public class ServerSupport extends AbstractVMSupport {
 
         boolean moreData = true;
         String baseTarget = "/servers";
-        String target = "/?fields=uuid,status";
+        String target = "/?limit=0&fields=uuid,status";
 
-        while(moreData)  {
+       // while(moreData)  {           - commented out as it seems paging is no longer supported
+        //but who knows when the api will change back again
             //dmayne 20130218: JSON Parsing
             target = baseTarget+target;
 
@@ -917,7 +918,8 @@ public class ServerSupport extends AbstractVMSupport {
                     }
                 }
 
-                //dmayne 20130314: check if there are more pages
+               /* //dmayne 20130314: check if there are more pages      - commented out as it seems paging is no longer supported
+                but who knows when the api will change back again
                 if (jObject.has("meta")) {
                     JSONObject meta = jObject.getJSONObject("meta");
 
@@ -929,12 +931,12 @@ public class ServerSupport extends AbstractVMSupport {
                     else  {
                         moreData = false;
                     }
-                }
+                }  */
             }
             catch (JSONException e) {
                 throw new InternalException(e);
             }
-        }
+      //  }
         return list;
     }
 
@@ -944,10 +946,11 @@ public class ServerSupport extends AbstractVMSupport {
         ArrayList<VirtualMachine> list = new ArrayList<VirtualMachine>();
 
         boolean moreData = true;
-        String baseTarget = "/servers/detail/";
+        String baseTarget = "/servers/detail/?limit=0";
         String target = "";
 
-        while(moreData)  {
+        //while(moreData)  {     - commented out as it seems paging is no longer supported
+        //but who knows when the api will change back again
             //dmayne 20130218: JSON Parsing
             target = baseTarget+target;
 
@@ -967,7 +970,8 @@ public class ServerSupport extends AbstractVMSupport {
                     }
                 }
 
-                //dmayne 20130314: check if there are more pages
+              /*  //dmayne 20130314: check if there are more pages       - commented out as it seems paging is no longer supported
+                but who knows when the api will change back again
                 if (jObject.has("meta")) {
                     JSONObject meta = jObject.getJSONObject("meta");
 
@@ -979,12 +983,12 @@ public class ServerSupport extends AbstractVMSupport {
                     else  {
                         moreData = false;
                     }
-                }
+                } */
             }
             catch (JSONException e) {
                 throw new InternalException(e);
             }
-        }
+     //   }
         return list;
     }
 
