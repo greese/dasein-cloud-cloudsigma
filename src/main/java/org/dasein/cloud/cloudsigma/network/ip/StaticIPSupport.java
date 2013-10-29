@@ -177,10 +177,11 @@ public class StaticIPSupport implements IpAddressSupport {
             CloudSigmaMethod method = new CloudSigmaMethod(provider);
 
             boolean moreData = true;
-            String baseTarget = "/ips/detail/";
+            String baseTarget = "/ips/detail/?limit=0";
             String target = "";
 
-            while(moreData)  {
+          //  while(moreData)  {          - commented out as it seems paging is no longer supported
+            //  but who knows when the api will change back again
                 //dmayne 20130218: JSON Parsing
                 target = baseTarget+target;
 
@@ -202,7 +203,8 @@ public class StaticIPSupport implements IpAddressSupport {
                         }
                     }
 
-                    //dmayne 20130314: check if there are more pages
+                   /* //dmayne 20130314: check if there are more pages       - commented out as it seems paging is no longer supported
+              //  but who knows when the api will change back again
                     if (pool.has("meta")) {
                         JSONObject meta = pool.getJSONObject("meta");
 
@@ -214,12 +216,12 @@ public class StaticIPSupport implements IpAddressSupport {
                         else  {
                             moreData = false;
                         }
-                    }
+                    } */
                 }
                 catch (JSONException e) {
                     throw new InternalException(e);
                 }
-            }
+           // }
             return addresses;
         }
         return Collections.emptyList();
@@ -234,9 +236,10 @@ public class StaticIPSupport implements IpAddressSupport {
 
             boolean moreData = true;
             String baseTarget = "/ips/";
-            String target = "?fields=uuid,server";
+            String target = "?limit=0&fields=uuid,server";
 
-            while(moreData)  {
+           // while(moreData)  {        - commented out as it seems paging is no longer supported
+            //  but who knows when the api will change back again
                 target = baseTarget+target;
 
                 JSONObject pool = method.list(target);
@@ -257,7 +260,8 @@ public class StaticIPSupport implements IpAddressSupport {
                         }
                     }
 
-                    //dmayne 20130314: check if there are more pages
+                    /*//dmayne 20130314: check if there are more pages       - commented out as it seems paging is no longer supported
+              //  but who knows when the api will change back again
                     if (pool.has("meta")) {
                         JSONObject meta = pool.getJSONObject("meta");
 
@@ -269,12 +273,12 @@ public class StaticIPSupport implements IpAddressSupport {
                         else  {
                             moreData = false;
                         }
-                    }
+                    }  */
                 }
                 catch (JSONException e) {
                     throw  new InternalException(e);
                 }
-            }
+           // }
             return addresses;
         }
         return Collections.emptyList();

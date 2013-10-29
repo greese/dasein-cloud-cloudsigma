@@ -19,7 +19,6 @@
 
 package org.dasein.cloud.cloudsigma.compute.image;
 
-import com.sun.servicetag.SystemEnvironment;
 import org.dasein.cloud.compute.*;
 import org.dasein.util.CalendarWrapper;
 import org.json.JSONArray;
@@ -33,12 +32,10 @@ import org.dasein.cloud.OperationNotSupportedException;
 import org.dasein.cloud.ProviderContext;
 import org.dasein.cloud.Requirement;
 import org.dasein.cloud.ResourceStatus;
-import org.dasein.cloud.Tag;
 import org.dasein.cloud.cloudsigma.CloudSigma;
 import org.dasein.cloud.cloudsigma.CloudSigmaConfigurationException;
 import org.dasein.cloud.cloudsigma.CloudSigmaMethod;
 import org.dasein.cloud.cloudsigma.NoContextException;
-import org.dasein.cloud.identity.ServiceAction;
 import org.dasein.util.uom.storage.Storage;
 
 import javax.annotation.Nonnull;
@@ -315,9 +312,10 @@ public class BootDriveSupport extends AbstractImageSupport {
 
         boolean moreData = true;
         String baseTarget = "/drives";
-        String target = "/?fields=uuid,meta,name,status,owner";
+        String target = "/?limit=0&fields=uuid,meta,name,status,owner";
 
-        while(moreData)  {
+       // while(moreData)  {       - commented out as it seems paging is no longer supported
+        //  but who knows when the api will change back again
             //dmayne 20130218: JSON Parsing
             target = baseTarget+target;
 
@@ -352,7 +350,8 @@ public class BootDriveSupport extends AbstractImageSupport {
                     }
                 }
 
-                //dmayne 20130314: check if there are more pages
+               /* //dmayne 20130314: check if there are more pages  - commented out as it seems paging is no longer supported
+              //  but who knows when the api will change back again
                 if (jObject.has("meta")) {
                     JSONObject meta = jObject.getJSONObject("meta");
 
@@ -364,12 +363,12 @@ public class BootDriveSupport extends AbstractImageSupport {
                     else  {
                         moreData = false;
                     }
-                }
+                } */
             }
             catch (JSONException e) {
                 throw new InternalException(e);
             }
-        }
+      //  }
         return list;
     }
 
@@ -383,10 +382,11 @@ public class BootDriveSupport extends AbstractImageSupport {
         CloudSigmaMethod method = new CloudSigmaMethod(provider);
 
         boolean moreData = true;
-        String baseTarget = "/drives/detail/";
+        String baseTarget = "/drives/detail/?limit=0";
         String target = "";
 
-        while(moreData)  {
+       // while(moreData)  {         - commented out as it seems paging is no longer supported
+        //  but who knows when the api will change back again
             //dmayne 20130218: JSON Parsing
             target = baseTarget+target;
 
@@ -427,7 +427,8 @@ public class BootDriveSupport extends AbstractImageSupport {
                     }
                 }
 
-                //dmayne 20130314: check if there are more pages
+               /* //dmayne 20130314: check if there are more pages  - commented out as it seems paging is no longer supported
+              //  but who knows when the api will change back again
                 if (jObject.has("meta")) {
                     JSONObject meta = jObject.getJSONObject("meta");
 
@@ -440,12 +441,12 @@ public class BootDriveSupport extends AbstractImageSupport {
                     else  {
                         moreData = false;
                     }
-                }
+                }  */
             }
             catch (JSONException e) {
                 throw new InternalException(e);
             }
-        }
+       // }
         return matches;
     }
 
@@ -466,10 +467,11 @@ public class BootDriveSupport extends AbstractImageSupport {
         CloudSigmaMethod method = new CloudSigmaMethod(provider);
 
         boolean moreData = true;
-        String baseTarget = "/libdrives/detail/";
+        String baseTarget = "/libdrives/detail/?limit=0";
         String target = "";
 
-        while(moreData)  {
+       // while(moreData)  {       - commented out as it seems paging is no longer supported
+        //  but who knows when the api will change back again
             //dmayne 20130218: JSON Parsing
             target = baseTarget+target;
 
@@ -497,7 +499,8 @@ public class BootDriveSupport extends AbstractImageSupport {
                     }
                 }
 
-                //dmayne 20130314: check if there are more pages
+               /* //dmayne 20130314: check if there are more pages         - commented out as it seems paging is no longer supported
+              //  but who knows when the api will change back again
                 if (jObj.has("meta")) {
                     JSONObject meta = jObj.getJSONObject("meta");
 
@@ -509,12 +512,12 @@ public class BootDriveSupport extends AbstractImageSupport {
                     else  {
                         moreData = false;
                     }
-                }
+                }   */
             }
             catch (JSONException e) {
                 throw new InternalException(e);
             }
-        }
+       // }
 
         return list;
     }
@@ -652,10 +655,11 @@ public class BootDriveSupport extends AbstractImageSupport {
         CloudSigmaMethod method = new CloudSigmaMethod(provider);
 
         boolean moreData = true;
-        String baseTarget = "/libdrives/detail/";
+        String baseTarget = "/libdrives/detail/?limit=0";
         String target = "";
 
-        while(moreData)  {
+       // while(moreData)  {      - commented out as it seems paging is no longer supported
+        //  but who knows when the api will change back again
             target = baseTarget+target;
 
             JSONObject jObject = method.list(target);
@@ -682,7 +686,8 @@ public class BootDriveSupport extends AbstractImageSupport {
                     }
                 }
 
-                //dmayne 20130314: check if there are more pages
+               /* //dmayne 20130314: check if there are more pages        - commented out as it seems paging is no longer supported
+              //  but who knows when the api will change back again
                 if (jObject.has("meta")) {
                     JSONObject meta = jObject.getJSONObject("meta");
 
@@ -694,12 +699,12 @@ public class BootDriveSupport extends AbstractImageSupport {
                     else  {
                         moreData = false;
                     }
-                }
+                }     */
             }
             catch (JSONException e) {
                 throw new InternalException(e);
             }
-        }
+       // }
 
         return matches;
     }
@@ -824,10 +829,10 @@ public class BootDriveSupport extends AbstractImageSupport {
             String s = drive.getString("status");
 
             if (s != null) {
-                if( s.equalsIgnoreCase("unmounted")  || ( s.equals("mounted") && image.getName().contains("buntu") ) ) {
+                if( s.equalsIgnoreCase("unmounted")  || s.equals("mounted")  ) {
                     image.setCurrentState(MachineImageState.ACTIVE);
                 }
-                else if( s.equalsIgnoreCase("mounted") || s.equalsIgnoreCase("copying") ) {
+                else if( s.equalsIgnoreCase("copying") ) {
                     image.setCurrentState(MachineImageState.PENDING);
                 }
                 else if( s.equalsIgnoreCase("unavailable") ) {
@@ -1012,10 +1017,10 @@ public class BootDriveSupport extends AbstractImageSupport {
             String s = drive.getString("status");
 
             if (s != null) {
-                if( s.equalsIgnoreCase("unmounted") || ( s.equals("mounted") && image.getName().contains("buntu") )) {
+                if( s.equalsIgnoreCase("unmounted") || s.equals("mounted") ) {
                     image.setCurrentState(MachineImageState.ACTIVE);
                 }
-                else if( s.equalsIgnoreCase("copying") || s.equalsIgnoreCase("mounted")) {
+                else if( s.equalsIgnoreCase("copying") ) {
                     image.setCurrentState(MachineImageState.PENDING);
                 }
                 else if( s.equalsIgnoreCase("unavailable") ) {
