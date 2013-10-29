@@ -214,9 +214,9 @@ public class DataDriveSupport extends AbstractVolumeSupport {
 
         boolean moreData = true;
         String baseTarget = "/drives";
-        String target = "/?fields=uuid,meta,name,status";
+        String target = "/?limit=0&fields=uuid,meta,name,status";
 
-        while(moreData)  {
+      //  while(moreData)  {      used for paging which cloudsigma no longer seems to support
             //dmayne 20130218: JSON Parsing
             target = baseTarget+target;
 
@@ -244,7 +244,8 @@ public class DataDriveSupport extends AbstractVolumeSupport {
                     }
                 }
 
-                //dmayne 20130314: check if there are more pages
+                /*//dmayne 20130314: check if there are more pages  - commented out as it seems paging is no longer supported
+                but who knows when the api will change back again
                 if (json.has("meta")) {
                     JSONObject meta = json.getJSONObject("meta");
 
@@ -256,12 +257,12 @@ public class DataDriveSupport extends AbstractVolumeSupport {
                     else  {
                         moreData = false;
                     }
-                }
+                }*/
             }
             catch (JSONException e) {
                 throw new InternalException(e);
             }
-        }
+       // }
 
         return list;
     }
@@ -273,10 +274,11 @@ public class DataDriveSupport extends AbstractVolumeSupport {
         CloudSigmaMethod method = new CloudSigmaMethod(provider);
 
         boolean moreData = true;
-        String baseTarget = "/drives/detail/";
+        String baseTarget = "/drives/detail/?limit=0";
         String target = "";
 
-        while(moreData)  {
+        //while(moreData)  {    - commented out as it seems paging is no longer supported
+        //but who knows when the api will change back again
             //dmayne 20130218: JSON Parsing
             target = baseTarget+target;
 
@@ -304,7 +306,8 @@ public class DataDriveSupport extends AbstractVolumeSupport {
                     }
                 }
 
-                //dmayne 20130314: check if there are more pages
+                /*//dmayne 20130314: check if there are more pages     - commented out as it seems paging is no longer supported
+                but who knows when the api will change back again
                 if (json.has("meta")) {
                     JSONObject meta = json.getJSONObject("meta");
 
@@ -316,12 +319,12 @@ public class DataDriveSupport extends AbstractVolumeSupport {
                     else  {
                         moreData = false;
                     }
-                }
+                } */
             }
             catch (JSONException e) {
                 throw new InternalException(e);
             }
-        }
+       // }
 
 
 
