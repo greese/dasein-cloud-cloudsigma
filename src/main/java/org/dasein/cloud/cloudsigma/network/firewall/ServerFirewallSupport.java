@@ -244,10 +244,11 @@ public class ServerFirewallSupport extends AbstractFirewallSupport {
         CloudSigmaMethod method = new CloudSigmaMethod(provider);
 
         boolean moreData = true;
-        String baseTarget = "/fwpolicies/detail/";
+        String baseTarget = "/fwpolicies/detail/?limit=0";
         String target = "";
 
-        while(moreData)  {
+       // while(moreData)  {     - commented out as it seems paging is no longer supported
+       // but who knows when the api will change back again
             target = baseTarget+target;
 
             try {
@@ -267,7 +268,8 @@ public class ServerFirewallSupport extends AbstractFirewallSupport {
                     }
                 }
 
-                //dmayne 20130314: check if there are more pages
+              /*  //dmayne 20130314: check if there are more pages          - commented out as it seems paging is no longer supported
+                but who knows when the api will change back again
                 if (json.has("meta")) {
                     JSONObject meta = json.getJSONObject("meta");
 
@@ -279,12 +281,12 @@ public class ServerFirewallSupport extends AbstractFirewallSupport {
                     else  {
                         moreData = false;
                     }
-                }
+                } */
             }
             catch (JSONException e) {
                 throw new InternalException(e);
             }
-        }
+    //    }
         return list;
     }
 
@@ -296,9 +298,10 @@ public class ServerFirewallSupport extends AbstractFirewallSupport {
 
         boolean moreData = true;
         String baseTarget = "/fwpolicies/";
-        String target = "?fields=uuid";
+        String target = "?limit=0&fields=uuid";
 
-        while(moreData)  {
+       // while(moreData)  {          - commented out as it seems paging is no longer supported
+       // but who knows when the api will change back again
             target = baseTarget+target;
 
             try {
@@ -318,7 +321,8 @@ public class ServerFirewallSupport extends AbstractFirewallSupport {
                     }
                 }
 
-                //dmayne 20130314: check if there are more pages
+               /* //dmayne 20130314: check if there are more pages    - commented out as it seems paging is no longer supported
+                but who knows when the api will change back again
                 if (json.has("meta")) {
                     JSONObject meta = json.getJSONObject("meta");
 
@@ -330,12 +334,12 @@ public class ServerFirewallSupport extends AbstractFirewallSupport {
                     else  {
                         moreData = false;
                     }
-                }
+                } */
             }
             catch (JSONException e) {
                 throw new InternalException(e);
             }
-        }
+       // }
         return list;
     }
 
