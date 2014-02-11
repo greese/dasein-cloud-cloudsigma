@@ -184,7 +184,10 @@ public class DataDriveSupport extends AbstractVolumeSupport {
 
             for (int i = 0; i <= 9; i++) {
                 for (int j = 0; j <= 3; j++) {
-                    ids.add(String.valueOf(i).concat(":").concat(String.valueOf(j)));
+                    if (i == 0 && j == 0){} //0:0 is always the boot drive so unavailable for attaching volumes
+                    else {
+                        ids.add(String.valueOf(i).concat(":").concat(String.valueOf(j)));
+                    }
                 }
             }
             deviceIds = Collections.unmodifiableList(ids);
