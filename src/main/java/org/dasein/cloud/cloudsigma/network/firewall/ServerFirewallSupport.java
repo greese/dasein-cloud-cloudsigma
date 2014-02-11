@@ -486,6 +486,11 @@ public class ServerFirewallSupport extends AbstractFirewallSupport {
     }
 
     @Override
+    public boolean supportsFirewallDeletion() throws CloudException, InternalException {
+        return false;
+    }
+
+    @Override
     public boolean supportsFirewallSources() throws CloudException, InternalException {
         return false;
     }
