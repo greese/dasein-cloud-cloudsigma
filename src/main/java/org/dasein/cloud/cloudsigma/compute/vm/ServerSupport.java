@@ -28,14 +28,24 @@ import org.dasein.cloud.CloudException;
 import org.dasein.cloud.InternalException;
 import org.dasein.cloud.OperationNotSupportedException;
 import org.dasein.cloud.ProviderContext;
-import org.dasein.cloud.Requirement;
 import org.dasein.cloud.ResourceStatus;
 import org.dasein.cloud.Tag;
 import org.dasein.cloud.cloudsigma.CloudSigma;
 import org.dasein.cloud.cloudsigma.CloudSigmaConfigurationException;
 import org.dasein.cloud.cloudsigma.CloudSigmaMethod;
 import org.dasein.cloud.cloudsigma.NoContextException;
-import org.dasein.cloud.compute.*;
+import org.dasein.cloud.compute.AbstractVMSupport;
+import org.dasein.cloud.compute.Architecture;
+import org.dasein.cloud.compute.MachineImage;
+import org.dasein.cloud.compute.MachineImageState;
+import org.dasein.cloud.compute.Platform;
+import org.dasein.cloud.compute.VirtualMachine;
+import org.dasein.cloud.compute.VirtualMachineCapabilities;
+import org.dasein.cloud.compute.VirtualMachineProduct;
+import org.dasein.cloud.compute.VMLaunchOptions;
+import org.dasein.cloud.compute.VMScalingOptions;
+import org.dasein.cloud.compute.VmState;
+import org.dasein.cloud.compute.Volume;
 import org.dasein.cloud.identity.ServiceAction;
 import org.dasein.cloud.network.IPVersion;
 import org.dasein.cloud.network.IpAddress;
@@ -50,9 +60,6 @@ import javax.annotation.Nullable;
 import java.io.UnsupportedEncodingException;
 import java.net.URLEncoder;
 import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.Locale;
 import java.util.Random;
 import java.util.TreeSet;
 
@@ -336,12 +343,6 @@ public class ServerSupport extends AbstractVMSupport {
         }
     }
 
-    @Override
-    public @Nullable VMScalingCapabilities describeVerticalScalingCapabilities() throws CloudException, InternalException {
-        return null;
-    }
-
-
     public void detach(@Nonnull Volume volume) throws CloudException, InternalException {
         String serverId = volume.getProviderVirtualMachineId();
 
@@ -397,14 +398,19 @@ public class ServerSupport extends AbstractVMSupport {
         // NO-OP
     }
 
+    private transient volatile VMCapabilities capabilities;
+    @Nonnull
     @Override
-    public @Nonnull String getConsoleOutput(@Nonnull String vmId) throws InternalException, CloudException {
-        return "";
+    public VirtualMachineCapabilities getCapabilities() throws InternalException, CloudException {
+        if( capabilities == null ) {
+            capabilities = new VMCapabilities(provider);
+        }
+        return capabilities;
     }
 
     @Override
-    public int getCostFactor(@Nonnull VmState state) throws InternalException, CloudException {
-        return 100;
+    public @Nonnull String getConsoleOutput(@Nonnull String vmId) throws InternalException, CloudException {
+        return "";
     }
 
     public @Nullable String getDeviceId(@Nonnull VirtualMachine vm, @Nonnull String volumeId) throws CloudException, InternalException {
@@ -419,11 +425,6 @@ public class ServerSupport extends AbstractVMSupport {
         }
 
         return null;
-    }
-
-    @Override
-    public int getMaximumVirtualMachineCount() throws CloudException, InternalException {
-        return -2;
     }
 
     @Override
@@ -457,11 +458,6 @@ public class ServerSupport extends AbstractVMSupport {
     }
 
     @Override
-    public @Nonnull String getProviderTermForServer(@Nonnull Locale locale) {
-        return "server";
-    }
-
-    @Override
     public VirtualMachine getVirtualMachine(@Nonnull String vmId) throws InternalException, CloudException {
         CloudSigmaMethod method = new CloudSigmaMethod(provider);
 
@@ -479,60 +475,10 @@ public class ServerSupport extends AbstractVMSupport {
     }
 
     @Override
-    public @Nonnull Requirement identifyImageRequirement(@Nonnull ImageClass cls) throws CloudException, InternalException {
-        return (cls.equals(ImageClass.MACHINE) ? Requirement.REQUIRED : Requirement.NONE);
-    }
-
-    @Override
-    public @Nonnull Requirement identifyPasswordRequirement(Platform platform) throws CloudException, InternalException {
-        return Requirement.OPTIONAL;
-    }
-
-    @Override
-    public @Nonnull Requirement identifyRootVolumeRequirement() throws CloudException, InternalException {
-        return Requirement.NONE;
-    }
-
-    @Override
-    public @Nonnull Requirement identifyShellKeyRequirement(Platform platform) throws CloudException, InternalException {
-        return Requirement.NONE;
-    }
-
-    @Override
-    public @Nonnull Requirement identifyStaticIPRequirement() throws CloudException, InternalException {
-        return Requirement.NONE;
-    }
-
-    @Override
-    public @Nonnull Requirement identifyVlanRequirement() throws CloudException, InternalException {
-        return Requirement.OPTIONAL;
-    }
-
-    @Override
-    public boolean isAPITerminationPreventable() throws CloudException, InternalException {
-        return false;
-    }
-
-    @Override
-    public boolean isBasicAnalyticsSupported() throws CloudException, InternalException {
-        return false;
-    }
-
-    @Override
-    public boolean isExtendedAnalyticsSupported() throws CloudException, InternalException {
-        return false;
-    }
-
-    @Override
     public boolean isSubscribed() throws CloudException, InternalException {
         CloudSigmaMethod method = new CloudSigmaMethod(provider);
         method.list("/servers");
         return true;
-    }
-
-    @Override
-    public boolean isUserDataSupported() throws CloudException, InternalException {
-        return false;
     }
 
     static private final Random random = new Random();
@@ -874,20 +820,6 @@ public class ServerSupport extends AbstractVMSupport {
         return products;
     }
 
-    static private volatile Collection<Architecture> architectures;
-
-    @Override
-    public Iterable<Architecture> listSupportedArchitectures() {
-        if (architectures == null) {
-            ArrayList<Architecture> list = new ArrayList<Architecture>();
-
-            list.add(Architecture.I64);
-            list.add(Architecture.I32);
-            architectures = Collections.unmodifiableCollection(list);
-        }
-        return architectures;
-    }
-
     @Override
     public @Nonnull Iterable<ResourceStatus> listVirtualMachineStatus() throws InternalException, CloudException {
         CloudSigmaMethod method = new CloudSigmaMethod(provider);
@@ -1130,21 +1062,6 @@ public class ServerSupport extends AbstractVMSupport {
                 logger.trace("EXIT - " + ServerSupport.class.getName() + ".stop()");
             }
         }
-    }
-
-    @Override
-    public boolean supportsPauseUnpause(@Nonnull VirtualMachine vm) {
-        return false;
-    }
-
-    @Override
-    public boolean supportsStartStop(@Nonnull VirtualMachine vm) {
-        return true;
-    }
-
-    @Override
-    public boolean supportsSuspendResume(@Nonnull VirtualMachine vm) {
-        return false;
     }
 
     @Override

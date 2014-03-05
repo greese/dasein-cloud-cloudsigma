@@ -20,24 +20,8 @@
 package org.dasein.cloud.cloudsigma.network.vlan;
 
 import org.dasein.cloud.network.AbstractVLANSupport;
-import org.json.JSONArray;
-import org.json.JSONException;
-import org.json.JSONObject;
-import org.apache.log4j.Logger;
-import org.dasein.cloud.CloudException;
-import org.dasein.cloud.InternalException;
-import org.dasein.cloud.OperationNotSupportedException;
-import org.dasein.cloud.ProviderContext;
-import org.dasein.cloud.Requirement;
-import org.dasein.cloud.ResourceStatus;
-import org.dasein.cloud.cloudsigma.CloudSigma;
-import org.dasein.cloud.cloudsigma.CloudSigmaConfigurationException;
-import org.dasein.cloud.cloudsigma.CloudSigmaMethod;
-import org.dasein.cloud.cloudsigma.NoContextException;
-import org.dasein.cloud.compute.ComputeServices;
-import org.dasein.cloud.compute.VirtualMachine;
-import org.dasein.cloud.compute.VirtualMachineSupport;
-import org.dasein.cloud.identity.ServiceAction;
+import org.dasein.cloud.network.VLANCapabilities;
+import org.dasein.cloud.network.InternetGateway;
 import org.dasein.cloud.network.IPVersion;
 import org.dasein.cloud.network.IpAddress;
 import org.dasein.cloud.network.IpAddressSupport;
@@ -49,12 +33,33 @@ import org.dasein.cloud.network.RoutingTable;
 import org.dasein.cloud.network.Subnet;
 import org.dasein.cloud.network.VLAN;
 import org.dasein.cloud.network.VLANState;
+import org.json.JSONArray;
+import org.json.JSONException;
+import org.json.JSONObject;
+import org.apache.log4j.Logger;
+import org.dasein.cloud.CloudException;
+import org.dasein.cloud.InternalException;
+import org.dasein.cloud.OperationNotSupportedException;
+import org.dasein.cloud.ProviderContext;
+import org.dasein.cloud.ResourceStatus;
+import org.dasein.cloud.cloudsigma.CloudSigma;
+import org.dasein.cloud.cloudsigma.CloudSigmaConfigurationException;
+import org.dasein.cloud.cloudsigma.CloudSigmaMethod;
+import org.dasein.cloud.cloudsigma.NoContextException;
+import org.dasein.cloud.compute.ComputeServices;
+import org.dasein.cloud.compute.VirtualMachine;
+import org.dasein.cloud.compute.VirtualMachineSupport;
+import org.dasein.cloud.identity.ServiceAction;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import java.io.UnsupportedEncodingException;
 import java.net.URLEncoder;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.Locale;
+
 
 /**
  * Support for VLANs in CloudSigma.
@@ -72,52 +77,6 @@ public class ServerVLANSupport extends AbstractVLANSupport {
     public ServerVLANSupport(@Nonnull CloudSigma provider) {
         super(provider);
         this.provider = provider;
-    }
-
-    @Override
-    public void addRouteToAddress(@Nonnull String toRoutingTableId, @Nonnull IPVersion version, @Nullable String destinationCidr, @Nonnull String address) throws CloudException, InternalException {
-        throw new OperationNotSupportedException("Routing tables are not supported");
-    }
-
-    @Override
-    public void addRouteToGateway(@Nonnull String toRoutingTableId, @Nonnull IPVersion version, @Nullable String destinationCidr, @Nonnull String gatewayId) throws CloudException, InternalException {
-        throw new OperationNotSupportedException("Routing tables are not supported");
-    }
-
-    @Override
-    public void addRouteToNetworkInterface(@Nonnull String toRoutingTableId, @Nonnull IPVersion version, @Nullable String destinationCidr, @Nonnull String nicId) throws CloudException, InternalException {
-        throw new OperationNotSupportedException("Routing tables are not supported");
-    }
-
-    @Override
-    public void addRouteToVirtualMachine(@Nonnull String toRoutingTableId, @Nonnull IPVersion version, @Nullable String destinationCidr, @Nonnull String vmId) throws CloudException, InternalException {
-        throw new OperationNotSupportedException("Routing tables are not supported");
-    }
-
-    @Override
-    public boolean allowsNewNetworkInterfaceCreation() throws CloudException, InternalException {
-        return false;
-    }
-
-    @Override
-    public boolean allowsNewVlanCreation() throws CloudException, InternalException {
-        //dmayne 20130221: New VLANs are created by buying a subscription.
-        return false;
-    }
-
-    @Override
-    public boolean allowsNewSubnetCreation() throws CloudException, InternalException {
-        return false;
-    }
-
-    @Override
-    public boolean allowsMultipleTrafficTypesOverSubnet() throws CloudException, InternalException {
-        return false;
-    }
-
-    @Override
-    public boolean allowsMultipleTrafficTypesOverVlan() throws CloudException, InternalException {
-        return false;
     }
 
     @Override
@@ -155,14 +114,13 @@ public class ServerVLANSupport extends AbstractVLANSupport {
         throw new OperationNotSupportedException("NICs are not supported");
     }
 
+    private transient volatile VlanCapabilities capabilities;
     @Override
-    public int getMaxNetworkInterfaceCount() throws CloudException, InternalException {
-        return 0;
-    }
-
-    @Override
-    public int getMaxVlanCount() throws CloudException, InternalException {
-        return -1;
+    public VLANCapabilities getCapabilities() throws CloudException, InternalException {
+        if( capabilities == null ) {
+            capabilities = new VlanCapabilities(provider);
+        }
+        return capabilities;
     }
 
     @Override
@@ -191,11 +149,6 @@ public class ServerVLANSupport extends AbstractVLANSupport {
     }
 
     @Override
-    public @Nonnull Requirement getRoutingTableSupport() throws CloudException, InternalException {
-        return Requirement.NONE;
-    }
-
-    @Override
     public RoutingTable getRoutingTableForVlan(@Nonnull String vlanId) throws CloudException, InternalException {
         return null;
     }
@@ -203,11 +156,6 @@ public class ServerVLANSupport extends AbstractVLANSupport {
     @Override
     public Subnet getSubnet(@Nonnull String subnetId) throws CloudException, InternalException {
         return null;
-    }
-
-    @Override
-    public @Nonnull Requirement getSubnetSupport() throws CloudException, InternalException {
-        return Requirement.NONE;
     }
 
     @Override
@@ -236,9 +184,16 @@ public class ServerVLANSupport extends AbstractVLANSupport {
         return true;
     }
 
+    @Nullable
     @Override
-    public boolean isNetworkInterfaceSupportEnabled() throws CloudException, InternalException {
-        return false;
+    public String getAttachedInternetGatewayId(@Nonnull String vlanId) throws CloudException, InternalException {
+        return null;  //To change body of implemented methods use File | Settings | File Templates.
+    }
+
+    @Nullable
+    @Override
+    public InternetGateway getInternetGatewayById(@Nonnull String gatewayId) throws CloudException, InternalException {
+        return null;  //To change body of implemented methods use File | Settings | File Templates.
     }
 
     @Override
@@ -247,18 +202,14 @@ public class ServerVLANSupport extends AbstractVLANSupport {
     }
 
     @Override
-    public boolean isSubnetDataCenterConstrained() throws CloudException, InternalException {
-        return false;
-    }
-
-    @Override
-    public boolean isVlanDataCenterConstrained() throws CloudException, InternalException {
-        return false;
-    }
-
-    @Override
     public Collection<String> listFirewallIdsForNIC(@Nonnull String nicId) throws CloudException, InternalException {
         return Collections.emptyList();
+    }
+
+    @Nonnull
+    @Override
+    public Collection<InternetGateway> listInternetGateways(@Nullable String vlanId) throws CloudException, InternalException {
+        return null;  //To change body of implemented methods use File | Settings | File Templates.
     }
 
     @Nonnull
@@ -445,6 +396,11 @@ public class ServerVLANSupport extends AbstractVLANSupport {
     }
 
     @Override
+    public void removeInternetGatewayById(@Nonnull String id) throws CloudException, InternalException {
+        //To change body of implemented methods use File | Settings | File Templates.
+    }
+
+    @Override
     public void removeNetworkInterface(@Nonnull String nicId) throws CloudException, InternalException {
         throw new OperationNotSupportedException("NICs are not supported");
     }
@@ -468,16 +424,6 @@ public class ServerVLANSupport extends AbstractVLANSupport {
     public void removeVlan(String vlanId) throws CloudException, InternalException {
         //dmayne 20130222: api 2.0 does not support deleting vlan
         throw new OperationNotSupportedException("Vlan deletion handled through subscriptions");
-    }
-
-    @Override
-    public boolean supportsInternetGatewayCreation() throws CloudException, InternalException {
-        return false;
-    }
-
-    @Override
-    public boolean supportsRawAddressRouting() throws CloudException, InternalException {
-        return false;
     }
 
     @Override
