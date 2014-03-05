@@ -25,7 +25,6 @@ import org.dasein.cloud.CloudException;
 import org.dasein.cloud.InternalException;
 import org.dasein.cloud.OperationNotSupportedException;
 import org.dasein.cloud.ProviderContext;
-import org.dasein.cloud.Requirement;
 import org.dasein.cloud.ResourceStatus;
 import org.dasein.cloud.Tag;
 import org.dasein.cloud.cloudsigma.CloudSigma;
@@ -35,6 +34,7 @@ import org.dasein.cloud.cloudsigma.NoContextException;
 import org.dasein.cloud.identity.ServiceAction;
 import org.dasein.cloud.network.Direction;
 import org.dasein.cloud.network.Firewall;
+import org.dasein.cloud.network.FirewallCapabilities;
 import org.dasein.cloud.network.FirewallCreateOptions;
 import org.dasein.cloud.network.FirewallRule;
 import org.dasein.cloud.network.AbstractFirewallSupport;
@@ -159,6 +159,16 @@ public class ServerFirewallSupport extends AbstractFirewallSupport {
         throw new OperationNotSupportedException("Deleting firewalls is not supported in CloudSigma api");
     }
 
+    private transient volatile ServerFirewallCapabilities capabilities;
+    @Nonnull
+    @Override
+    public FirewallCapabilities getCapabilities() throws CloudException, InternalException {
+        if( capabilities == null ) {
+            capabilities = new ServerFirewallCapabilities(provider);
+        }
+        return capabilities;
+    }
+
     @Nullable
     @Override
     public Firewall getFirewall(@Nonnull String firewallId) throws InternalException, CloudException {
@@ -217,19 +227,8 @@ public class ServerFirewallSupport extends AbstractFirewallSupport {
         }
     }
 
-    @Nonnull
-    @Override
-    public Requirement identifyPrecedenceRequirement(boolean inVlan) throws InternalException, CloudException {
-        return Requirement.NONE;
-    }
-
     @Override
     public boolean isSubscribed() throws CloudException, InternalException {
-        return true;
-    }
-
-    @Override
-    public boolean isZeroPrecedenceHighest() throws InternalException, CloudException {
         return true;
     }
 
@@ -467,27 +466,6 @@ public class ServerFirewallSupport extends AbstractFirewallSupport {
         catch (JSONException e) {
             throw new InternalException(e);
         }
-    }
-
-    @Override
-    public boolean supportsRules(@Nonnull Direction direction, @Nonnull Permission permission, boolean inVlan) throws CloudException, InternalException {
-        if (!inVlan) {
-            return true;
-        }
-        return false;
-    }
-
-    @Override
-    public boolean supportsFirewallCreation(boolean inVlan) throws CloudException, InternalException {
-        if (!inVlan) {
-            return true;
-        }
-        return false;
-    }
-
-    @Override
-    public boolean supportsFirewallDeletion() throws CloudException, InternalException {
-        return false;
     }
 
     @Override
