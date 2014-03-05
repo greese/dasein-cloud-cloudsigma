@@ -20,7 +20,6 @@
 package org.dasein.cloud.cloudsigma.compute.block;
 
 import org.dasein.cloud.OperationNotSupportedException;
-import org.dasein.cloud.Tag;
 import org.dasein.util.CalendarWrapper;
 import org.json.JSONArray;
 import org.json.JSONException;
@@ -35,15 +34,28 @@ import org.dasein.cloud.cloudsigma.CloudSigma;
 import org.dasein.cloud.cloudsigma.CloudSigmaConfigurationException;
 import org.dasein.cloud.cloudsigma.CloudSigmaMethod;
 import org.dasein.cloud.cloudsigma.NoContextException;
-import org.dasein.cloud.compute.*;
-import org.dasein.cloud.identity.ServiceAction;
-import org.dasein.util.uom.storage.*;
+import org.dasein.cloud.compute.AbstractVolumeSupport;
+import org.dasein.cloud.compute.Platform;
+import org.dasein.cloud.compute.VirtualMachine;
+import org.dasein.cloud.compute.Volume;
+import org.dasein.cloud.compute.VolumeCapabilities;
+import org.dasein.cloud.compute.VolumeCreateOptions;
+import org.dasein.cloud.compute.VolumeFormat;
+import org.dasein.cloud.compute.VolumeProduct;
+import org.dasein.cloud.compute.VolumeState;
+import org.dasein.cloud.compute.VolumeType;
+import org.dasein.cloud.compute.VmState;
+import org.dasein.util.uom.storage.Gigabyte;
+import org.dasein.util.uom.storage.Storage;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import java.io.UnsupportedEncodingException;
 import java.net.URLEncoder;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.Locale;
 
 /**
  * Implements support for block storage devices that may be attached to virtual machines in CloudSigma.
@@ -122,6 +134,15 @@ public class DataDriveSupport extends AbstractVolumeSupport {
             throw new CloudException("No such volume: " + volumeId);
         }
         provider.getComputeServices().getVirtualMachineSupport().detach(v);
+    }
+
+    private transient volatile DataDriveCapabilities capabilities;
+    @Override
+    public VolumeCapabilities getCapabilities() throws CloudException, InternalException {
+        if( capabilities == null ) {
+            capabilities = new DataDriveCapabilities(provider);
+        }
+        return capabilities;
     }
 
     public @Nullable String getDrive(String driveId) throws CloudException, InternalException {
