@@ -21,6 +21,7 @@ package org.dasein.cloud.cloudsigma;
 
 import org.apache.log4j.Logger;
 import org.dasein.cloud.AbstractCloud;
+import org.dasein.cloud.ContextRequirements;
 import org.dasein.cloud.ProviderContext;
 import org.dasein.cloud.cloudsigma.compute.CloudSigmaComputeServices;
 import org.dasein.cloud.cloudsigma.network.CloudSigmaNetworkServices;
@@ -75,6 +76,14 @@ public class CloudSigma extends AbstractCloud {
         String name = (ctx == null ? null : ctx.getCloudName());
 
         return (name == null ? "CloudSigma2" : name);
+    }
+
+    @Override
+    public @Nonnull
+    ContextRequirements getContextRequirements() {
+        return new ContextRequirements(
+                new ContextRequirements.Field("apiKey", "The API Keypair", ContextRequirements.FieldType.KEYPAIR, ContextRequirements.Field.ACCESS_KEYS, true)
+        );
     }
 
     @Override
