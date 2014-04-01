@@ -99,17 +99,15 @@ public class ServerFirewallSupport extends AbstractFirewallSupport {
             JSONObject rule = new JSONObject();
             rule.put("action", (permission == Permission.ALLOW ? "accept" : "drop"));
             rule.put("direction", (direction == Direction.INGRESS ? "in" : "out"));
-            rule.put("dst_ip", destinationEndpoint.getCidr());
+            rule.put("dst_ip", destinationEndpoint == null ? null : destinationEndpoint.getCidr());
             rule.put("dst_port", String.valueOf(beginPort)+((endPort >= 0 && endPort!=beginPort) ? ":"+String.valueOf(endPort) : ""));
             rule.put("ip_proto", (protocol == Protocol.TCP ? "tcp" : "udp"));
-            rule.put("src_ip", sourceEndpoint.getCidr() );
+            rule.put("src_ip", sourceEndpoint == null ? null : sourceEndpoint.getCidr() );
             rules.put(rule);
 
             String firewallObj = method.putString(toFirewallURL(firewallId, ""), fw.toString());
-
             if (firewallObj != null) {
                 FirewallRule newRule =  FirewallRule.getInstance(null, firewallId, sourceEndpoint, direction, protocol, permission, destinationEndpoint, beginPort, endPort);
-
                 return newRule.getProviderRuleId();
             }
         }
@@ -437,8 +435,8 @@ public class ServerFirewallSupport extends AbstractFirewallSupport {
 
     @Override
     public void revoke(@Nonnull String firewallId, @Nonnull Direction direction, @Nonnull Permission permission, @Nonnull String source, @Nonnull Protocol protocol, @Nonnull RuleTarget target, int beginPort, int endPort) throws CloudException, InternalException {
-        String tmpRuleId = FirewallRule.getRuleId(firewallId, RuleTarget.getCIDR(source), direction, protocol, permission, target, beginPort, endPort);
-
+        RuleTarget src = source == null ? null : RuleTarget.getCIDR(source);
+        String tmpRuleId = FirewallRule.getRuleId(firewallId, src, direction, protocol, permission, target, beginPort, endPort);
         revoke(tmpRuleId, firewallId);
     }
 
@@ -613,13 +611,6 @@ public class ServerFirewallSupport extends AbstractFirewallSupport {
                     startPort = Integer.parseInt(destPort);
                     endPort = startPort;
                 }
-            }
-
-            if(sourceEndpoint == null) {
-                sourceEndpoint = RuleTarget.getGlobal(providerFirewallId);
-            }
-            if(destEndpoint == null) {
-                destEndpoint = RuleTarget.getGlobal(providerFirewallId);
             }
         }
         catch (JSONException e) {
