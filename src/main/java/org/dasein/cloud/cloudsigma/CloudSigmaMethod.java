@@ -172,6 +172,7 @@ public class CloudSigmaMethod {
                 wire.debug("");
                 wire.debug(">>> [GET (" + (new Date()) + ")] -> " + target + " >--------------------------------------------------------------------------------------");
             }
+            HttpClient client = null;
             try {
                 URI uri;
 
@@ -180,7 +181,7 @@ public class CloudSigmaMethod {
                 } catch (URISyntaxException e) {
                     throw new CloudSigmaConfigurationException(e);
                 }
-                HttpClient client = getClient(uri);
+                client = getClient(uri);
 
                 try {
                     ProviderContext ctx = provider.getContext();
@@ -292,6 +293,9 @@ public class CloudSigmaMethod {
                     wire.debug("<<< [GET (" + (new Date()) + ")] -> " + target + " <--------------------------------------------------------------------------------------");
                     wire.debug("");
                 }
+                if (client != null) {
+                    client.getConnectionManager().shutdown();
+                }
             }
         } finally {
             if (logger.isTraceEnabled()) {
@@ -402,6 +406,7 @@ public class CloudSigmaMethod {
                 wire.debug("");
                 wire.debug(">>> [POST (" + (new Date()) + ")] -> " + target + " >--------------------------------------------------------------------------------------");
             }
+            HttpClient client = null;
             try {
                 URI uri;
 
@@ -410,7 +415,7 @@ public class CloudSigmaMethod {
                 } catch (URISyntaxException e) {
                     throw new CloudSigmaConfigurationException(e);
                 }
-                HttpClient client = getClient(uri);
+                client = getClient(uri);
 
                 try {
                     ProviderContext ctx = provider.getContext();
@@ -525,6 +530,9 @@ public class CloudSigmaMethod {
                     wire.debug("<<< [POST (" + (new Date()) + ")] -> " + target + " <--------------------------------------------------------------------------------------");
                     wire.debug("");
                 }
+                if (client != null) {
+                    client.getConnectionManager().shutdown();
+                }
             }
         } finally {
             if (logger.isTraceEnabled()) {
@@ -545,6 +553,7 @@ public class CloudSigmaMethod {
                 wire.debug("");
                 wire.debug(">>> [PUT (" + (new Date()) + ")] -> " + target + " >--------------------------------------------------------------------------------------");
             }
+            HttpClient client = null;
             try {
                 URI uri;
 
@@ -553,7 +562,7 @@ public class CloudSigmaMethod {
                 } catch (URISyntaxException e) {
                     throw new CloudSigmaConfigurationException(e);
                 }
-                HttpClient client = getClient(uri);
+                client = getClient(uri);
 
                 try {
                     ProviderContext ctx = provider.getContext();
@@ -667,6 +676,9 @@ public class CloudSigmaMethod {
                     wire.debug("<<< [PUT (" + (new Date()) + ")] -> " + target + " <--------------------------------------------------------------------------------------");
                     wire.debug("");
                 }
+                if (client != null) {
+                    client.getConnectionManager().shutdown();
+                }
             }
         } finally {
             if (logger.isTraceEnabled()) {
@@ -687,6 +699,7 @@ public class CloudSigmaMethod {
                 wire.debug("");
                 wire.debug(">>> [DELETE (" + (new Date()) + ")] -> " + target + " >--------------------------------------------------------------------------------------");
             }
+            HttpClient client = null;
             try {
                 URI uri;
 
@@ -695,7 +708,7 @@ public class CloudSigmaMethod {
                 } catch (URISyntaxException e) {
                     throw new CloudSigmaConfigurationException(e);
                 }
-                HttpClient client = getClient(uri);
+                client = getClient(uri);
 
                 try {
                     ProviderContext ctx = provider.getContext();
@@ -802,6 +815,9 @@ public class CloudSigmaMethod {
                 if (wire.isDebugEnabled()) {
                     wire.debug("<<< [DELETE (" + (new Date()) + ")] -> " + target + " <--------------------------------------------------------------------------------------");
                     wire.debug("");
+                }
+                if (client != null) {
+                    client.getConnectionManager().shutdown();
                 }
             }
         } finally {
