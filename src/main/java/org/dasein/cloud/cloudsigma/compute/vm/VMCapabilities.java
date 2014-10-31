@@ -1,9 +1,6 @@
 package org.dasein.cloud.cloudsigma.compute.vm;
 
-import org.dasein.cloud.AbstractCapabilities;
-import org.dasein.cloud.CloudException;
-import org.dasein.cloud.InternalException;
-import org.dasein.cloud.Requirement;
+import org.dasein.cloud.*;
 import org.dasein.cloud.cloudsigma.CloudSigma;
 import org.dasein.cloud.compute.Architecture;
 import org.dasein.cloud.compute.ImageClass;
@@ -110,6 +107,18 @@ public class VMCapabilities extends AbstractCapabilities<CloudSigma> implements 
         return NamingConstraints.getAlphaNumeric(1, 64);
     }
 
+    @Nullable
+    @Override
+    public VisibleScope getVirtualMachineVisibleScope() {
+        return null;  //To change body of implemented methods use File | Settings | File Templates.
+    }
+
+    @Nullable
+    @Override
+    public VisibleScope getVirtualMachineProductVisibleScope() {
+        return null;  //To change body of implemented methods use File | Settings | File Templates.
+    }
+
     @Nonnull
     @Override
     public Requirement identifyDataCenterLaunchRequirement() throws CloudException, InternalException {
@@ -179,6 +188,11 @@ public class VMCapabilities extends AbstractCapabilities<CloudSigma> implements 
         return false;
     }
 
+    @Override
+    public boolean isUserDefinedPrivateIPSupported() throws CloudException, InternalException {
+        return false;
+    }
+
     static private volatile Collection<Architecture> architectures;
     @Nonnull
     @Override
@@ -191,5 +205,60 @@ public class VMCapabilities extends AbstractCapabilities<CloudSigma> implements 
             architectures = Collections.unmodifiableCollection(list);
         }
         return architectures;
+    }
+
+    @Override
+    public boolean supportsSpotVirtualMachines() throws InternalException, CloudException {
+        return false;
+    }
+
+    @Override
+    public boolean supportsAlterVM() {
+        return false;
+    }
+
+    @Override
+    public boolean supportsClone() {
+        return true;
+    }
+
+    @Override
+    public boolean supportsPause() {
+        return false;
+    }
+
+    @Override
+    public boolean supportsReboot() {
+        return true;
+    }
+
+    @Override
+    public boolean supportsResume() {
+        return false;
+    }
+
+    @Override
+    public boolean supportsStart() {
+        return true;
+    }
+
+    @Override
+    public boolean supportsStop() {
+        return true;
+    }
+
+    @Override
+    public boolean supportsSuspend() {
+        return false;
+    }
+
+    @Override
+    public boolean supportsTerminate() {
+        return true;
+    }
+
+    @Override
+    public boolean supportsUnPause() {
+        return false;
     }
 }

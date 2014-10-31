@@ -9,6 +9,7 @@ import org.dasein.cloud.compute.Platform;
 import org.dasein.cloud.compute.VmState;
 import org.dasein.cloud.compute.VolumeCapabilities;
 import org.dasein.cloud.compute.VolumeFormat;
+import org.dasein.cloud.util.NamingConstraints;
 import org.dasein.util.uom.storage.Gigabyte;
 import org.dasein.util.uom.storage.Storage;
 
@@ -45,16 +46,42 @@ public class DataDriveCapabilities extends AbstractCapabilities<CloudSigma> impl
         return -2;
     }
 
+    @Override
+    public int getMaximumVolumeProductIOPS() throws InternalException, CloudException {
+        return 0;  //To change body of implemented methods use File | Settings | File Templates.
+    }
+
+    @Override
+    public int getMinimumVolumeProductIOPS() throws InternalException, CloudException {
+        return 0;  //To change body of implemented methods use File | Settings | File Templates.
+    }
+
+    @Override
+    public int getMaximumVolumeSizeIOPS() throws InternalException, CloudException {
+        return 0;  //To change body of implemented methods use File | Settings | File Templates.
+    }
+
+    @Override
+    public int getMinimumVolumeSizeIOPS() throws InternalException, CloudException {
+        return 0;  //To change body of implemented methods use File | Settings | File Templates.
+    }
+
     @Nullable
     @Override
     public Storage<Gigabyte> getMaximumVolumeSize() throws InternalException, CloudException {
-        return null;
+        return new Storage<Gigabyte>(100, Storage.GIGABYTE);
     }
 
     @Nonnull
     @Override
     public Storage<Gigabyte> getMinimumVolumeSize() throws InternalException, CloudException {
         return new Storage<Gigabyte>(1, Storage.GIGABYTE);
+    }
+
+    @Nonnull
+    @Override
+    public NamingConstraints getVolumeNamingConstraints() throws CloudException, InternalException {
+        return NamingConstraints.getAlphaOnly(0, 0);
     }
 
     @Nonnull

@@ -22,9 +22,7 @@ package org.dasein.cloud.cloudsigma;
 import org.dasein.cloud.CloudException;
 import org.dasein.cloud.InternalException;
 import org.dasein.cloud.ProviderContext;
-import org.dasein.cloud.dc.DataCenter;
-import org.dasein.cloud.dc.DataCenterServices;
-import org.dasein.cloud.dc.Region;
+import org.dasein.cloud.dc.*;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
@@ -43,6 +41,52 @@ import java.util.Locale;
  */
 public class CloudSigmaDataCenterServices implements DataCenterServices {
     private CloudSigma provider;
+
+    private transient volatile CSDataCenterCapabilities capabilities;
+    @Nonnull
+    @Override
+    public DataCenterCapabilities getCapabilities() throws InternalException, CloudException {
+        if( capabilities == null ) {
+            capabilities = new CSDataCenterCapabilities(provider);
+        }
+        return capabilities;
+    }
+
+    @Nonnull
+    @Override
+    public Collection<ResourcePool> listResourcePools(String providerDataCenterId) throws InternalException, CloudException {
+        return Collections.emptyList();
+    }
+
+    @Nullable
+    @Override
+    public ResourcePool getResourcePool(String providerResourcePoolId) throws InternalException, CloudException {
+        return null;
+    }
+
+    @Nonnull
+    @Override
+    public Collection<StoragePool> listStoragePools() throws InternalException, CloudException {
+        return Collections.emptyList();
+    }
+
+    @Nonnull
+    @Override
+    public StoragePool getStoragePool(String providerStoragePoolId) throws InternalException, CloudException {
+        return null;
+    }
+
+    @Nonnull
+    @Override
+    public Collection<Folder> listVMFolders() throws InternalException, CloudException {
+        return Collections.emptyList();
+    }
+
+    @Nonnull
+    @Override
+    public Folder getVMFolder(String providerVMFolderId) throws InternalException, CloudException {
+        return null;
+    }
 
     CloudSigmaDataCenterServices(@Nonnull CloudSigma provider) { this.provider = provider; }
 

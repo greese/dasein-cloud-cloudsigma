@@ -69,7 +69,7 @@ import java.util.Locale;
  * @version 2013.02 initial version
  * @since 2013.02
  */
-public class ServerVLANSupport extends AbstractVLANSupport {
+public class ServerVLANSupport extends AbstractVLANSupport<CloudSigma> {
     static private final Logger logger = CloudSigma.getLogger(ServerVLANSupport.class);
 
     private CloudSigma provider;

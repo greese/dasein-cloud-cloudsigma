@@ -63,7 +63,7 @@ import java.util.Locale;
  * @version 2013.04
  * @since 2013.02
  */
-public class ServerFirewallSupport extends AbstractFirewallSupport {
+public class ServerFirewallSupport extends AbstractFirewallSupport<CloudSigma> {
     static private final Logger logger = CloudSigma.getLogger(ServerFirewallSupport.class);
 
     private CloudSigma provider;
