@@ -137,6 +137,6 @@ public class ServerFirewallCapabilities extends AbstractCapabilities<CloudSigma>
 
     @Override
     public boolean supportsFirewallDeletion() throws CloudException, InternalException {
-        return false;
+        return true;
     }
 }
