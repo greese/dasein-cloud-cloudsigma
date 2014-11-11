@@ -109,6 +109,11 @@ public class BootDriveCapabilities extends AbstractCapabilities<CloudSigma> impl
     }
 
     @Override
+    public boolean supportsListingAllRegions() throws CloudException, InternalException {
+        return false;
+    }
+
+    @Override
     public boolean supportsPublicLibrary(@Nonnull ImageClass cls) throws CloudException, InternalException {
         return true;
     }
