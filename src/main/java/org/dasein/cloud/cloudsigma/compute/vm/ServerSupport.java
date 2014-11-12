@@ -20,6 +20,7 @@
 package org.dasein.cloud.cloudsigma.compute.vm;
 
 import org.dasein.cloud.cloudsigma.CloudSigmaException;
+import org.dasein.cloud.compute.*;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -34,18 +35,6 @@ import org.dasein.cloud.cloudsigma.CloudSigma;
 import org.dasein.cloud.cloudsigma.CloudSigmaConfigurationException;
 import org.dasein.cloud.cloudsigma.CloudSigmaMethod;
 import org.dasein.cloud.cloudsigma.NoContextException;
-import org.dasein.cloud.compute.AbstractVMSupport;
-import org.dasein.cloud.compute.Architecture;
-import org.dasein.cloud.compute.MachineImage;
-import org.dasein.cloud.compute.MachineImageState;
-import org.dasein.cloud.compute.Platform;
-import org.dasein.cloud.compute.VirtualMachine;
-import org.dasein.cloud.compute.VirtualMachineCapabilities;
-import org.dasein.cloud.compute.VirtualMachineProduct;
-import org.dasein.cloud.compute.VMLaunchOptions;
-import org.dasein.cloud.compute.VMScalingOptions;
-import org.dasein.cloud.compute.VmState;
-import org.dasein.cloud.compute.Volume;
 import org.dasein.cloud.identity.ServiceAction;
 import org.dasein.cloud.network.IPVersion;
 import org.dasein.cloud.network.IpAddress;
@@ -60,6 +49,7 @@ import javax.annotation.Nullable;
 import java.io.UnsupportedEncodingException;
 import java.net.URLEncoder;
 import java.util.ArrayList;
+import java.util.List;
 import java.util.Random;
 import java.util.TreeSet;
 
@@ -71,7 +61,7 @@ import java.util.TreeSet;
  * @version 2013.02 initial version
  * @since 2013.02
  */
-public class ServerSupport extends AbstractVMSupport {
+public class ServerSupport extends AbstractVMSupport<CloudSigma> {
     static private final Logger logger = CloudSigma.getLogger(ServerSupport.class);
 
     private CloudSigma provider;
@@ -232,11 +222,6 @@ public class ServerSupport extends AbstractVMSupport {
                 logger.trace("EXIT - " + ServerSupport.class.getName() + ".change()");
             }
         }
-    }
-
-    @Override
-    public VirtualMachine alterVirtualMachine(@Nonnull String vmId, @Nonnull VMScalingOptions options) throws InternalException, CloudException {
-        throw new OperationNotSupportedException("VM alteration not yet supported");
     }
 
     @Override
@@ -795,27 +780,31 @@ public class ServerSupport extends AbstractVMSupport {
         return list;
     }
 
-    private transient ArrayList<VirtualMachineProduct> cachedProducts;
-
     @Override
-    public @Nonnull Iterable<VirtualMachineProduct> listProducts(@Nonnull Architecture architecture) throws InternalException, CloudException {
-        ArrayList<VirtualMachineProduct> products = cachedProducts;
+    public @Nonnull Iterable<VirtualMachineProduct> listProducts(@Nullable VirtualMachineProductFilterOptions options, @Nullable Architecture architecture) throws InternalException, CloudException {
+        List<VirtualMachineProduct> products = new ArrayList<VirtualMachineProduct>();
 
-        if (products == null) {
-            products = new ArrayList<VirtualMachineProduct>();
+        products = new ArrayList<VirtualMachineProduct>();
 
-            for (int ram : new int[]{1024, 2048, 4096, 8192, 12288, 16384, 20480, 24576, 28668, 32768}) {
-                for (int cpu : new int[]{1000, 1200, 1500, 2000}) {
-                    for (int cpuCount : new int[]{1, 2, 4, 8, 12}) {
-                        if (cpuCount == 1) {
-                            products.add(getProduct(ram + ":" + cpu));
-                        } else {
-                            products.add(getProduct(ram + ":" + cpu + ":" + cpuCount));
-                        }
+        for (int ram : new int[]{1024, 2048, 4096, 8192, 12288, 16384, 20480, 24576, 28668, 32768}) {
+            for (int cpu : new int[]{1000, 1200, 1500, 2000}) {
+                for (int cpuCount : new int[]{1, 2, 4, 8, 12}) {
+                    if (cpuCount == 1) {
+                        products.add(getProduct(ram + ":" + cpu));
+                    } else {
+                        products.add(getProduct(ram + ":" + cpu + ":" + cpuCount));
                     }
                 }
             }
-            cachedProducts = products;
+        }
+        if (options != null) {
+            List<VirtualMachineProduct> tmp = new ArrayList<VirtualMachineProduct>();
+            for (VirtualMachineProduct p : products) {
+                if (options.matches(p)) {
+                    tmp.add(p);
+                }
+            }
+            products = tmp;
         }
         return products;
     }

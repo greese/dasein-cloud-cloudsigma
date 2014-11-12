@@ -37,6 +37,12 @@ public class StaticIPCapabilities extends AbstractCapabilities<CloudSigma> imple
         return Requirement.REQUIRED;
     }
 
+    @Nonnull
+    @Override
+    public Requirement identifyVlanForIPRequirement() throws CloudException, InternalException {
+        return Requirement.NONE;
+    }
+
     @Override
     public boolean isAssigned(@Nonnull IPVersion version) throws CloudException, InternalException {
         return version.equals(IPVersion.IPV4);

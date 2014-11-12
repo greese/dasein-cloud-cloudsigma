@@ -67,7 +67,7 @@ import java.util.Locale;
  * @version 2013.02 initial version
  * @since 2013.02
  */
-public class BootDriveSupport extends AbstractImageSupport {
+public class BootDriveSupport extends AbstractImageSupport<CloudSigma> {
     static private final Logger logger = CloudSigma.getLogger(BootDriveSupport.class);
 
     private CloudSigma provider;

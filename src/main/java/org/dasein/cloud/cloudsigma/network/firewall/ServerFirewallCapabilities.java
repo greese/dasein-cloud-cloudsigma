@@ -1,21 +1,12 @@
 package org.dasein.cloud.cloudsigma.network.firewall;
 
-import org.dasein.cloud.AbstractCapabilities;
-import org.dasein.cloud.CloudException;
-import org.dasein.cloud.InternalException;
-import org.dasein.cloud.Requirement;
+import org.dasein.cloud.*;
 import org.dasein.cloud.cloudsigma.CloudSigma;
-import org.dasein.cloud.network.Direction;
-import org.dasein.cloud.network.FirewallCapabilities;
-import org.dasein.cloud.network.FirewallConstraints;
-import org.dasein.cloud.network.Permission;
-import org.dasein.cloud.network.RuleTargetType;
+import org.dasein.cloud.network.*;
 
 import javax.annotation.Nonnull;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.Locale;
+import javax.annotation.Nullable;
+import java.util.*;
 
 /**
  * Describes the capabilities of Cloudsigma with respect to Dasein firewall operations.
@@ -39,6 +30,12 @@ public class ServerFirewallCapabilities extends AbstractCapabilities<CloudSigma>
     @Override
     public String getProviderTermForFirewall(@Nonnull Locale locale) {
         return "firewall policy";
+    }
+
+    @Nullable
+    @Override
+    public VisibleScope getFirewallVisibleScope() {
+        return null;  //To change body of implemented methods use File | Settings | File Templates.
     }
 
     @Nonnull
@@ -91,6 +88,18 @@ public class ServerFirewallCapabilities extends AbstractCapabilities<CloudSigma>
 
     @Nonnull
     @Override
+    public Iterable<Protocol> listSupportedProtocols(boolean inVlan) throws InternalException, CloudException {
+        if (!inVlan) {
+            List<Protocol> list = new ArrayList<Protocol>();
+            list.add(Protocol.TCP);
+            list.add(Protocol.UDP);
+            return list;
+        }
+        return Collections.emptyList();
+    }
+
+    @Nonnull
+    @Override
     public Iterable<RuleTargetType> listSupportedSourceTypes(boolean inVlan) throws InternalException, CloudException {
         if (!inVlan) {
             Collection<RuleTargetType> sourceTypes = new ArrayList<RuleTargetType>();
@@ -128,6 +137,6 @@ public class ServerFirewallCapabilities extends AbstractCapabilities<CloudSigma>
 
     @Override
     public boolean supportsFirewallDeletion() throws CloudException, InternalException {
-        return false;
+        return true;
     }
 }

@@ -42,6 +42,7 @@ import org.apache.http.util.EntityUtils;
 import org.apache.log4j.Logger;
 import org.dasein.cloud.CloudErrorType;
 import org.dasein.cloud.CloudException;
+import org.dasein.cloud.ContextRequirements;
 import org.dasein.cloud.InternalException;
 import org.dasein.cloud.ProviderContext;
 import org.json.JSONException;
@@ -55,6 +56,7 @@ import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 
@@ -191,14 +193,24 @@ public class CloudSigmaMethod {
                     HttpGet get = new HttpGet(target);
                     String auth;
 
+                    String accessPublic = null;
+                    String accessPrivate = null;
                     try {
-                        String userName = new String(ctx.getAccessPublic(), "utf-8");
-                        String password = new String(ctx.getAccessPrivate(), "utf-8");
-
-                        auth = new String(Base64.encodeBase64((userName + ":" + password).getBytes()));
-                    } catch (UnsupportedEncodingException e) {
-                        throw new InternalException(e);
+                        List<ContextRequirements.Field> fields = provider.getContextRequirements().getConfigurableValues();
+                        for(ContextRequirements.Field f : fields ) {
+                            if(f.type.equals(ContextRequirements.FieldType.KEYPAIR)){
+                                byte[][] keyPair = (byte[][])provider.getContext().getConfigurationValue(f);
+                                accessPublic = new String(keyPair[0], "utf-8");
+                                accessPrivate = new String(keyPair[1], "utf-8");
+                            }
+                        }
                     }
+                    catch( UnsupportedEncodingException e ) {
+                        e.printStackTrace();
+                        throw new RuntimeException("This cannot happen: " + e.getMessage());
+                    }
+
+                    auth = new String(Base64.encodeBase64((accessPublic + ":" + accessPrivate).getBytes()));
                     //dmayne 20130218: add JSON headers
                     get.addHeader("Host", uri.getHost());
                     get.addHeader("Content-Type", "application/json; charset=utf-8");
@@ -421,14 +433,25 @@ public class CloudSigmaMethod {
                     HttpPost post = new HttpPost(target);
                     String auth;
 
+                    String accessPublic = null;
+                    String accessPrivate = null;
                     try {
-                        String userName = new String(ctx.getAccessPublic(), "utf-8");
-                        String password = new String(ctx.getAccessPrivate(), "utf-8");
-
-                        auth = new String(Base64.encodeBase64((userName + ":" + password).getBytes()));
-                    } catch (UnsupportedEncodingException e) {
-                        throw new InternalException(e);
+                        List<ContextRequirements.Field> fields = provider.getContextRequirements().getConfigurableValues();
+                        for(ContextRequirements.Field f : fields ) {
+                            if(f.type.equals(ContextRequirements.FieldType.KEYPAIR)){
+                                byte[][] keyPair = (byte[][])provider.getContext().getConfigurationValue(f);
+                                accessPublic = new String(keyPair[0], "utf-8");
+                                accessPrivate = new String(keyPair[1], "utf-8");
+                            }
+                        }
                     }
+                    catch( UnsupportedEncodingException e ) {
+                        e.printStackTrace();
+                        throw new RuntimeException("This cannot happen: " + e.getMessage());
+                    }
+
+                    auth = new String(Base64.encodeBase64((accessPublic + ":" + accessPrivate).getBytes()));
+
                     //dmayne 20130218: add new JSON headers
                     post.addHeader("Host", uri.getHost());
                     post.addHeader("Content-Type", "application/json; charset=utf-8");
@@ -564,14 +587,25 @@ public class CloudSigmaMethod {
                     HttpPut put = new HttpPut(target);
                     String auth;
 
+                    String accessPublic = null;
+                    String accessPrivate = null;
                     try {
-                        String userName = new String(ctx.getAccessPublic(), "utf-8");
-                        String password = new String(ctx.getAccessPrivate(), "utf-8");
-
-                        auth = new String(Base64.encodeBase64((userName + ":" + password).getBytes()));
-                    } catch (UnsupportedEncodingException e) {
-                        throw new InternalException(e);
+                        List<ContextRequirements.Field> fields = provider.getContextRequirements().getConfigurableValues();
+                        for(ContextRequirements.Field f : fields ) {
+                            if(f.type.equals(ContextRequirements.FieldType.KEYPAIR)){
+                                byte[][] keyPair = (byte[][])provider.getContext().getConfigurationValue(f);
+                                accessPublic = new String(keyPair[0], "utf-8");
+                                accessPrivate = new String(keyPair[1], "utf-8");
+                            }
+                        }
                     }
+                    catch( UnsupportedEncodingException e ) {
+                        e.printStackTrace();
+                        throw new RuntimeException("This cannot happen: " + e.getMessage());
+                    }
+
+                    auth = new String(Base64.encodeBase64((accessPublic + ":" + accessPrivate).getBytes()));
+
                     //dmayne 20130218: add new JSON headers
                     put.addHeader("Host", uri.getHost());
                     put.addHeader("Content-Type", "application/json; charset=utf-8");
@@ -706,14 +740,25 @@ public class CloudSigmaMethod {
                     HttpDelete delete = new HttpDelete(target);
                     String auth;
 
+                    String accessPublic = null;
+                    String accessPrivate = null;
                     try {
-                        String userName = new String(ctx.getAccessPublic(), "utf-8");
-                        String password = new String(ctx.getAccessPrivate(), "utf-8");
-
-                        auth = new String(Base64.encodeBase64((userName + ":" + password).getBytes()));
-                    } catch (UnsupportedEncodingException e) {
-                        throw new InternalException(e);
+                        List<ContextRequirements.Field> fields = provider.getContextRequirements().getConfigurableValues();
+                        for(ContextRequirements.Field f : fields ) {
+                            if(f.type.equals(ContextRequirements.FieldType.KEYPAIR)){
+                                byte[][] keyPair = (byte[][])provider.getContext().getConfigurationValue(f);
+                                accessPublic = new String(keyPair[0], "utf-8");
+                                accessPrivate = new String(keyPair[1], "utf-8");
+                            }
+                        }
                     }
+                    catch( UnsupportedEncodingException e ) {
+                        e.printStackTrace();
+                        throw new RuntimeException("This cannot happen: " + e.getMessage());
+                    }
+
+                    auth = new String(Base64.encodeBase64((accessPublic + ":" + accessPrivate).getBytes()));
+
                     //dmayne 20130218: add new JSON headers
                     delete.addHeader("Host", uri.getHost());
                     delete.addHeader("Content-Type", "application/json; charset=utf-8");

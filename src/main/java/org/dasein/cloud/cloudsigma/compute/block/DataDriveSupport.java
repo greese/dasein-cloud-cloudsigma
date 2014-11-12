@@ -65,7 +65,7 @@ import java.util.Locale;
  * @version 2013.02 initial version
  * @since 2013.02
  */
-public class DataDriveSupport extends AbstractVolumeSupport {
+public class DataDriveSupport extends AbstractVolumeSupport<CloudSigma> {
     static private final Logger logger = CloudSigma.getLogger(DataDriveSupport.class);
 
     private CloudSigma provider;

@@ -49,6 +49,7 @@ import java.net.URLEncoder;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Locale;
+import java.util.concurrent.Future;
 
 /**
  * Support for static IP addresses in CloudSigma.
@@ -236,6 +237,12 @@ public class StaticIPSupport implements IpAddressSupport {
             return addresses;
         }
         return Collections.emptyList();
+    }
+
+    @Nonnull
+    @Override
+    public Future<Iterable<IpAddress>> listIpPoolConcurrently(@Nonnull IPVersion version, boolean unassignedOnly) throws InternalException, CloudException {
+        return null;  //To change body of implemented methods use File | Settings | File Templates.
     }
 
     @Override
