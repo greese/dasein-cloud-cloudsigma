@@ -19,6 +19,7 @@
 
 package org.dasein.cloud.cloudsigma.network.vlan;
 
+import org.dasein.cloud.*;
 import org.dasein.cloud.network.AbstractVLANSupport;
 import org.dasein.cloud.network.VLANCapabilities;
 import org.dasein.cloud.network.InternetGateway;
@@ -37,11 +38,6 @@ import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.apache.log4j.Logger;
-import org.dasein.cloud.CloudException;
-import org.dasein.cloud.InternalException;
-import org.dasein.cloud.OperationNotSupportedException;
-import org.dasein.cloud.ProviderContext;
-import org.dasein.cloud.ResourceStatus;
 import org.dasein.cloud.cloudsigma.CloudSigma;
 import org.dasein.cloud.cloudsigma.CloudSigmaConfigurationException;
 import org.dasein.cloud.cloudsigma.CloudSigmaMethod;
@@ -424,6 +420,11 @@ public class ServerVLANSupport extends AbstractVLANSupport<CloudSigma> {
     public void removeVlan(String vlanId) throws CloudException, InternalException {
         //dmayne 20130222: api 2.0 does not support deleting vlan
         throw new OperationNotSupportedException("Vlan deletion handled through subscriptions");
+    }
+
+    @Override
+    public void updateInternetGatewayTags(@Nonnull String internetGatewayId, @Nonnull Tag... tags) throws CloudException, InternalException {
+        throw new OperationNotSupportedException("Internet gateways are not supported");
     }
 
     @Override
